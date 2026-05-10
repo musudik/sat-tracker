@@ -1110,6 +1110,10 @@ const SAT_INFO = {
   62132: { desc: "SpaceX Starlink LEO satellite providing global high-speed broadband internet connectivity as part of the world's largest commercial satellite internet constellation.", type: "Broadband Internet", agency: "SpaceX" },
 };
 
+// Disable Leaflet default icon (prevents ghost blue markers)
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({ iconUrl: '', shadowUrl: '', iconSize: [0,0] });
+
 // Color per zone
 const ZONE_COLOR = { LEO: '#00ff88', MEO: '#ffd700', GEO: '#ff4466', DEEP: '#aa88ff' };
 const ZONE_LABEL = { LEO: '🟢 LEO', MEO: '🟡 MEO', GEO: '🔴 GEO', DEEP: '⚫ Deep Space' };
@@ -1447,6 +1451,7 @@ function updateMapMarkers() {
       const icon = L.icon({
         iconUrl: iconPath,
         iconSize: [26, 26], iconAnchor: [13, 13],
+        shadowUrl: '', shadowSize: [0, 0],
         className: 'sat-map-icon'
       });
       const marker = L.marker([d.lat, d.lng], {icon})
@@ -2207,6 +2212,7 @@ async function trackSelected() {
       const icon = L.icon({
         iconUrl: iconPath,
         iconSize: [28, 28], iconAnchor: [14, 14],
+        shadowUrl: '', shadowSize: [0, 0],
         className: 'sat-map-icon'
       });
 

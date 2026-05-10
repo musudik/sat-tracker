@@ -1772,7 +1772,8 @@ async function loadCountry(code) {
 
   countryData = satellites;
   renderCountryTable();
-  if (_countryView === 'kanban') { _ckOpenNorads.clear(); renderCountryKanban(); }
+  // Apply current view mode — ensures kanban renders and table/kanban visibility is correct
+  setCountryView(_countryView);
   stats.textContent = `${meta.flag} ${satellites.length} satellites`;
   document.querySelector('.tbl-select-all').style.display = 'inline-block';
   document.getElementById('track-btn').style.display = 'inline-block';
@@ -1901,6 +1902,7 @@ const CK_FALLBACK_ICONS = [
   'satellite-icons/satellite3.png','satellite-icons/satellite4.png',
 ];
 function ckIconFor(type, norad) {
+  if (norad === 25544) return 'satellite-icons/space-station.png'; // ISS
   if (!type) return CK_FALLBACK_ICONS[norad % CK_FALLBACK_ICONS.length];
   const t = type.toLowerCase();
   for (const [key, path] of Object.entries(CK_TYPE_ICONS)) {

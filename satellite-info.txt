@@ -1,0 +1,377 @@
+## 🇷🇺 CIS / Russia Satellites
+
+### 1. Progress MS-34
+
+An automated Russian cargo spacecraft delivering food, fuel, scientific equipment, water, oxygen, and spare parts to the International Space Station. It also helps boost ISS orbit and dispose of waste.
+
+### 2. Kosmos 2618
+
+Believed to support Russian military intelligence, surveillance, communications, or electronic reconnaissance missions. Exact functions remain classified, but Kosmos-series satellites often support defense monitoring and strategic operations.
+
+### 3. Kosmos 2617
+
+Likely part of Russia’s defense satellite network for reconnaissance, missile warning, secure communications, or orbital testing. These satellites usually operate under classified military space programs.
+
+### 4. Kosmos 2616
+
+A classified Russian military spacecraft possibly designed for electronic intelligence gathering, Earth observation, or secure communications supporting national defense and strategic monitoring activities.
+
+### 5. Kosmos 2615
+
+Likely used for reconnaissance, military communications, or experimental orbital technologies. Russia’s Kosmos program includes many classified satellites supporting security and defense infrastructure.
+
+### 6. Kosmos 2614
+
+Part of Russia’s classified Kosmos series, probably supporting military surveillance, signals intelligence, or strategic communications for national security and space-based defense coordination.
+
+### 7. Kosmos 2613
+
+Likely intended for military intelligence operations including reconnaissance, electronic monitoring, or communications relay. Detailed mission data is generally not publicly disclosed by Russia.
+
+### 8. Kosmos 2612
+
+A defense-oriented satellite potentially supporting surveillance, navigation, missile detection, or military communications as part of Russia’s expanding orbital security capabilities.
+
+### 9. Kosmos 2611
+
+Believed to conduct classified military operations such as Earth observation, electronic reconnaissance, or secure communications for Russian armed forces and intelligence agencies.
+
+### 10. Kosmos 2610
+
+Part of Russia’s long-running Kosmos satellite family, likely supporting military intelligence, navigation systems, orbital experiments, or strategic defense communications.
+
+### 11. Kosmos 2609
+
+A classified Russian satellite possibly used for reconnaissance, missile-warning support, or secure communications within Russia’s military and strategic space operations network.
+
+### 12. Meridian 11
+
+A military communications satellite providing secure communication services to Russian armed forces, Arctic regions, ships, aircraft, and remote northern territories with limited terrestrial infrastructure.
+
+### 13. Rassvet-3
+
+A group of satellites likely designed for communications, relay services, or experimental networking functions supporting Russian civilian or military orbital communication infrastructure.
+
+### 14. Progress MS-33
+
+An automated cargo spacecraft supplying the International Space Station with food, equipment, fuel, scientific payloads, and orbital correction capabilities for station maintenance.
+
+### 15. Elektro-L No.5
+
+A geostationary meteorological satellite monitoring weather systems, storms, climate conditions, and environmental activity across Russia and neighboring regions using infrared and visible imaging instruments.
+
+---
+
+## 🇨🇳 China Satellites
+
+### 1. PRSC-E03
+
+Likely an experimental or remote-sensing satellite supporting scientific research, Earth observation, environmental monitoring, or technology validation within China’s growing commercial space initiatives.
+
+### 2. HJS-9A
+
+Part of the Huanjing Shiyan experimental satellite program, believed to support military surveillance, signals intelligence, or technology testing for China’s defense and strategic monitoring operations.
+
+### 3. HJS-9B
+
+A classified Chinese satellite likely used for reconnaissance, communications testing, or electronic intelligence collection under military or strategic experimental space missions.
+
+### 4. HJS-9C
+
+Believed to support China’s military surveillance and intelligence capabilities, possibly involving electronic monitoring, imaging systems, or experimental orbital technologies.
+
+### 5. HJS-9D
+
+Part of China’s experimental defense-oriented satellite network, likely focused on reconnaissance, secure communications, or testing advanced military space technologies.
+
+### 6. HJS-8A
+
+A classified experimental spacecraft potentially supporting surveillance, electronic intelligence gathering, or advanced orbital systems research for Chinese defense applications.
+
+### 7. Daqi-2
+
+Designed to study Earth’s atmosphere, pollution, greenhouse gases, and climate conditions using advanced sensors for environmental research and air-quality monitoring.
+
+### 8. Hulianwang Digui 166
+
+Part of China’s low-Earth-orbit broadband internet constellation intended to provide high-speed communication services, data connectivity, and satellite networking capabilities.
+
+### 9. Hulianwang Digui 167
+
+Supports China’s expanding satellite internet infrastructure by enabling broadband communications, network coverage, and future global connectivity services from low Earth orbit.
+
+### 10. Hulianwang Digui 168
+
+A communications satellite within China’s broadband constellation project aimed at delivering internet access, data relay, and advanced orbital networking technologies.
+
+### 11. Qianfan Constellation
+
+China’s planned mega-constellation similar to SpaceX Starlink, designed to provide global broadband internet, communications coverage, and strategic satellite networking services.
+
+### 12. Tiangong Tianhe
+
+The core module of China’s space station, providing astronaut living quarters, power systems, docking ports, life-support functions, and scientific research facilities in orbit.
+
+### 13. Fengyun-4B
+
+An advanced geostationary meteorological satellite monitoring storms, typhoons, atmospheric conditions, climate activity, and environmental changes using high-resolution imaging sensors.
+
+
+
+## 🇯🇵 Japan Satellites
+
+### 1. OrigamiSat-2
+
+A technology-demonstration satellite testing lightweight deployable structures inspired by origami engineering for future communication antennas, solar panels, and compact spacecraft designs.
+
+### 2. STRiX
+
+Synthetic aperture radar satellites providing high-resolution Earth imaging regardless of weather or daylight, supporting disaster monitoring, agriculture, infrastructure inspection, and maritime surveillance.
+
+### 3. Ten-Koh 2
+
+An experimental spacecraft testing advanced satellite systems, onboard electronics, and miniaturized technologies for future Japanese scientific and commercial space missions.
+
+### 4. QPS-SAR-8 Amateru-IV
+
+A radar imaging satellite delivering high-resolution Earth observation data for disaster response, mapping, infrastructure monitoring, defense applications, and environmental analysis day or night.
+
+### 5. QPS-SAR-9 Susanoo-I
+
+Part of Japan’s radar observation constellation, enabling all-weather imaging for emergency management, urban monitoring, agriculture, and maritime security operations.
+
+### 6. QPS-SAR-10 Wadatsumi-I
+
+A commercial radar satellite providing frequent Earth imaging for disaster tracking, flood analysis, security surveillance, and geospatial intelligence services.
+
+### 7. QPS-SAR-11 Yamatsumi
+
+Supports rapid Earth observation using synthetic aperture radar technology for terrain mapping, infrastructure assessment, environmental studies, and defense-related imaging tasks.
+
+### 8. QPS-SAR-14 Yachihoko-1
+
+A radar imaging satellite designed for high-frequency observation of Earth’s surface, supporting commercial analytics, disaster relief, and monitoring critical infrastructure.
+
+### 9. QPS-SAR-15 Sukunami-1
+
+Provides high-resolution radar imagery for environmental monitoring, disaster management, urban planning, maritime tracking, and intelligence applications under all weather conditions.
+
+### 10. RAISE-4
+
+An experimental small satellite testing innovative communication, sensing, and spacecraft technologies developed by Japanese universities and research institutions.
+
+### 11. HTV-X1
+
+Japan’s next-generation cargo spacecraft supplying the International Space Station with food, experiments, equipment, and advanced logistics support capabilities.
+
+### 12. GOSAT-GW
+
+Monitors greenhouse gases, climate conditions, and water cycles to improve environmental research, climate prediction, and global warming analysis.
+
+### 13. QZS-6
+
+Part of Japan’s Quasi-Zenith Satellite System, enhancing GPS accuracy for navigation, transportation, smartphones, autonomous vehicles, and disaster response services across Asia-Pacific.
+
+### 14. STRiX-2
+
+A synthetic aperture radar satellite delivering precise Earth observation imagery for environmental monitoring, security operations, and infrastructure analysis regardless of weather.
+
+### 15. DSN-3
+
+Provides secure communications for Japan’s defense forces, supporting military operations, strategic coordination, and reliable data transmission across remote regions.
+
+### 16. IGS Radar-8
+
+An intelligence-gathering radar satellite monitoring military activities, disasters, and regional security threats using high-resolution all-weather imaging technology.
+
+### 17. ALOS-4
+
+An advanced land observation satellite using radar sensors for disaster management, environmental studies, mapping, forestry monitoring, and infrastructure assessment.
+
+### 18. Hakuto-R
+
+A commercial lunar exploration spacecraft developed for Moon landing missions, carrying scientific payloads and testing technologies for future lunar transportation services.
+
+---
+
+## 🇪🇺 ESA Satellites
+
+### 1. LPNTSAT-001
+
+A satellite testing resilient positioning, navigation, and timing technologies designed to improve Europe’s secure navigation infrastructure against interference and signal disruptions.
+
+### 2. LPNTSAT-002
+
+Supports experimental navigation and timing systems research aimed at improving secure satellite-based positioning and communication reliability across Europe.
+
+### 3. KOMPSAT-7
+
+A high-resolution imaging satellite for environmental monitoring, urban planning, agriculture, defense reconnaissance, and disaster response applications.
+
+### 4. HydroGNSS
+
+Studies soil moisture, wetlands, floods, and freeze-thaw conditions using reflected GNSS signals to improve climate and hydrological monitoring worldwide.
+
+### 5. Sentinel-1D
+
+Provides all-weather radar imaging for environmental monitoring, disaster management, maritime surveillance, land mapping, and climate research under Europe’s Copernicus program.
+
+### 6. Sentinel-1C
+
+Supports continuous Earth monitoring through radar imaging, enabling flood tracking, ice monitoring, agriculture analysis, and infrastructure assessment.
+
+### 7. Sentinel-2C
+
+Captures high-resolution optical imagery for agriculture, forestry, environmental monitoring, urban planning, and climate observation worldwide.
+
+### 8. Sentinel-3B
+
+Measures sea surface temperatures, ocean color, vegetation, and atmospheric conditions for environmental and climate research.
+
+### 9. Sentinel-6 Michael Freilich
+
+Monitors global sea-level rise and ocean circulation with highly accurate radar altimetry supporting climate science and weather forecasting.
+
+### 10. MetOp-SG-A
+
+A next-generation meteorological satellite improving weather forecasting, atmospheric monitoring, and climate research across Europe and globally.
+
+### 11. Biomass
+
+Measures global forest biomass and carbon storage using advanced radar technology to improve climate change and ecosystem research.
+
+### 12. Proba-3
+
+A dual-spacecraft mission demonstrating precision formation flying to study the Sun’s corona and advanced autonomous orbital operations.
+
+### 13. Galileo
+
+Europe’s global navigation satellite network providing precise positioning, navigation, and timing services for civilian and commercial applications worldwide.
+
+### 14. Euclid
+
+A space observatory studying dark matter, dark energy, and the large-scale structure of the universe to better understand cosmic expansion.
+
+### 15. James Webb Space Telescope
+
+An infrared space observatory exploring early galaxies, exoplanets, star formation, and deep-space phenomena with unprecedented sensitivity and resolution.
+
+### 16. CHEOPS
+
+Studies known exoplanets by measuring their sizes, compositions, and orbital properties to improve understanding of planetary systems beyond Earth.
+
+### 17. EDRS-C
+
+Provides near real-time data relay between low-Earth-orbit satellites and ground stations using advanced laser communication technology.
+
+---
+
+## 🇫🇷 France Satellites
+
+### 1. FlyLab-1
+
+A small satellite testing educational, communication, or experimental technologies developed for research, academic, and commercial space innovation programs.
+
+### 2. FlyLab-2
+
+Supports technology validation and scientific experiments related to small satellite systems, communications, and Earth observation research.
+
+### 3. SpaceVan-002
+
+An experimental spacecraft designed for orbital technology demonstrations, communication systems testing, and future commercial satellite applications.
+
+### 4. BRO-19
+
+A compact satellite likely supporting scientific experiments, communications research, or Earth observation missions within France’s growing smallsat ecosystem.
+
+### 5. Project Kuiper
+
+A global broadband internet constellation developed by Amazon to provide high-speed satellite internet services worldwide.
+
+### 6. SPOT-7
+
+Provides high-resolution optical imagery for mapping, agriculture, defense, disaster management, and environmental monitoring applications worldwide.
+
+### 7. Pléiades 1A
+
+A high-resolution imaging satellite supporting defense intelligence, mapping, disaster response, and environmental monitoring with detailed optical observations.
+
+### 8. Pléiades 1B
+
+Works alongside Pléiades 1A to provide rapid high-resolution Earth imagery for military, scientific, and commercial observation missions.
+
+---
+
+## 🇮🇳 India Satellites
+
+### 1. CMS-01
+
+Provides communication and broadcasting services across India, supporting television transmission, telecommunications, and digital connectivity in remote regions.
+
+### 2. NISAR
+
+A joint India-US radar mission studying earthquakes, glaciers, forests, land deformation, and climate-related environmental changes with advanced radar imaging.
+
+### 3. NVS-01
+
+Part of India’s NavIC navigation system, providing accurate regional positioning, navigation, and timing services across India and surrounding regions.
+
+### 4. NVS-02
+
+Enhances India’s independent satellite navigation network for transportation, disaster response, military operations, and civilian positioning services.
+
+### 5. SDX01
+
+An experimental spacecraft testing autonomous docking technologies essential for future Indian space stations, crewed missions, and orbital servicing operations.
+
+### 6. SDX02
+
+Supports India’s development of advanced rendezvous and docking capabilities required for long-duration spaceflight and modular orbital missions.
+
+### 7. GSAT-20
+
+Provides broadband connectivity, communication services, and high-throughput satellite capabilities for internet and digital infrastructure across India.
+
+### 8. GSAT-30
+
+Supports television broadcasting, telecommunications, VSAT networks, and secure communication services throughout the Indian subcontinent.
+
+### 9. EOS-4
+
+A radar imaging satellite monitoring agriculture, forestry, floods, and environmental changes using all-weather Earth observation technology.
+
+### 10. EOS-6
+
+Studies ocean surface temperatures, weather systems, wind patterns, and climate conditions supporting marine and meteorological research.
+
+### 11. EOS-8
+
+Provides high-resolution Earth imaging for environmental monitoring, disaster management, urban planning, and strategic applications.
+
+### 12. TSAT-1A
+
+A technology demonstration satellite supporting scientific experiments, communication systems testing, and advanced Indian space research initiatives.
+
+### 13. INSAT-3DS
+
+Improves weather forecasting, storm tracking, climate monitoring, and disaster warning services using advanced meteorological instruments.
+
+### 14. XPoSat
+
+Studies cosmic X-ray sources, black holes, neutron stars, and high-energy astronomical phenomena using advanced scientific instruments.
+
+### 15. Aditya-L1
+
+India’s first solar mission studying the Sun’s corona, solar winds, magnetic fields, and space weather effects from the Lagrange-1 point.
+
+### 16. RISAT-2B
+
+Provides all-weather surveillance, reconnaissance, agriculture monitoring, and disaster observation using synthetic aperture radar technology.
+
+### 17. RISAT-2BR2
+
+Supports military surveillance, border monitoring, disaster management, and environmental observation through high-resolution radar imaging.
+
+### 18. Cartosat-3
+
+A very high-resolution Earth observation satellite used for mapping, urban planning, defense intelligence, and infrastructure monitoring.

@@ -1,0 +1,2239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>🛸 Live Satellite Tracker</title>
+
+<!-- Leaflet Map -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- satellite.js for TLE position math (client-side, no API calls for positions) -->
+<script src="https://unpkg.com/satellite.js@5.0.0/dist/satellite.min.js"></script>
+<!-- Cyber fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --bg: #020810;
+    --surface: #0a1520;
+    --card: #0d1a2e;
+    --card-hover: #112238;
+    --border: #1a2d4a;
+    --text: #b8d4f0;
+    --muted: #4a6080;
+    --leo: #00ff88;
+    --meo: #ffd700;
+    --geo: #ff4466;
+    --deep: #aa88ff;
+    --accent: #00c8ff;
+    --accent2: #00ff9d;
+    --toolbar: #040c18;
+    --cyber: 'Orbitron', 'Courier New', monospace;
+    --mono: 'Share Tech Mono', 'Courier New', monospace;
+    --hud-green: #00ff9d;
+    --hud-blue: #00c8ff;
+    --hud-red: #ff3366;
+    --hud-orange: #ff9500;
+    --scanline: rgba(0,200,255,0.03);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 99999; pointer-events: none;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, var(--scanline) 2px, var(--scanline) 4px);
+    animation: scanroll 8s linear infinite;
+  }
+  @keyframes scanroll { from { background-position: 0 0; } to { background-position: 0 400px; } }
+
+  body {
+    background: var(--bg);
+    background-image:
+      radial-gradient(ellipse at 20% 50%, rgba(0,40,80,0.4) 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 20%, rgba(0,80,60,0.2) 0%, transparent 50%);
+    color: var(--text);
+    font-family: var(--mono);
+    height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+  }
+
+  /* TOOLBAR */
+  #toolbar {
+    background: var(--toolbar);
+    border-bottom: 2px solid var(--accent);
+    box-shadow: 0 0 20px rgba(0,200,255,0.15), 0 2px 0 rgba(0,200,255,0.1);
+    padding: 10px 16px;
+    display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+  #toolbar h1 {
+    font-family: var(--cyber); font-size: 1rem; color: var(--accent);
+    white-space: nowrap; letter-spacing: 2px; text-transform: uppercase;
+    text-shadow: 0 0 10px var(--accent), 0 0 20px rgba(0,200,255,0.5);
+  }
+  .view-btn {
+    background: transparent; border: 1px solid var(--muted);
+    color: var(--muted); padding: 5px 14px; border-radius: 2px; cursor: pointer;
+    font-family: var(--cyber); font-size: 0.72rem; letter-spacing: 1px;
+    transition: all 0.2s; text-transform: uppercase; position: relative; overflow: hidden;
+  }
+  .view-btn::before {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(135deg, transparent 40%, rgba(0,200,255,0.05) 100%);
+  }
+  .view-btn:hover { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 8px rgba(0,200,255,0.3); }
+  .view-btn.active {
+    background: rgba(0,200,255,0.15); color: var(--accent); border-color: var(--accent);
+    font-weight: bold; box-shadow: 0 0 12px rgba(0,200,255,0.4), inset 0 0 8px rgba(0,200,255,0.1);
+  }
+  #status-bar { margin-left: auto; font-size: 0.72rem; color: var(--muted); white-space: nowrap; font-family: var(--mono); }
+  #refresh-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--leo); margin-right: 5px; animation: pulse 2s infinite; box-shadow: 0 0 6px var(--leo); }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.3;transform:scale(0.8)} }
+  #last-update { color: var(--muted); font-size: 0.7rem; }
+  .loc-btn {
+    background: transparent; border: 1px solid var(--border); color: var(--muted);
+    padding: 4px 10px; border-radius: 2px; cursor: pointer; font-size: 0.75rem; font-family: var(--mono);
+  }
+  .loc-btn:hover { border-color: var(--accent2); color: var(--accent2); box-shadow: 0 0 6px rgba(0,255,157,0.3); }
+
+  /* KANBAN */
+  #kanban-view {
+    display: flex; gap: 12px; padding: 12px; overflow-x: auto; flex: 1; min-height: 0;
+  }
+  .kb-col {
+    min-width: 260px; max-width: 300px; flex: 1;
+    display: flex; flex-direction: column; gap: 0;
+    background: var(--surface); border-radius: 8px; border: 1px solid var(--border); overflow: hidden;
+  }
+  .kb-col-header {
+    padding: 10px 14px; font-size: 0.82rem; font-weight: bold; letter-spacing: 1px;
+    border-bottom: 2px solid; display: flex; justify-content: space-between; align-items: center;
+  }
+  .col-leo .kb-col-header  { color: var(--leo);  border-color: var(--leo);  }
+  .col-meo .kb-col-header  { color: var(--meo);  border-color: var(--meo);  }
+  .col-geo .kb-col-header  { color: var(--geo);  border-color: var(--geo);  }
+  .col-deep .kb-col-header { color: var(--deep); border-color: var(--deep); }
+  .kb-col-body { overflow-y: auto; flex: 1; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+  .kb-col-body::-webkit-scrollbar { width: 4px; }
+  .kb-col-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* CARDS */
+  .sat-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 6px;
+    padding: 10px 12px; cursor: pointer; transition: all 0.2s; position: relative;
+    border-left: 3px solid transparent;
+  }
+  .sat-card:hover { background: var(--card-hover); transform: translateY(-1px); }
+  .col-leo  .sat-card { border-left-color: var(--leo); }
+  .col-meo  .sat-card { border-left-color: var(--meo); }
+  .col-geo  .sat-card { border-left-color: var(--geo); }
+  .col-deep .sat-card { border-left-color: var(--deep); }
+  .sat-card.updated { animation: flash 0.6s ease; }
+  @keyframes flash { 0%{background:#0af2} 100%{background:var(--card)} }
+  .card-title { font-size: 0.82rem; font-weight: bold; color: #eaf; margin-bottom: 6px; }
+  .card-row { display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--muted); margin: 2px 0; }
+  .card-val { color: var(--text); font-weight: bold; }
+  .card-badge { position: absolute; top: 8px; right: 8px; font-size: 0.65rem; background: var(--border); padding: 2px 6px; border-radius: 10px; }
+  .card-expand { display: none; margin-top: 8px; border-top: 1px solid var(--border); padding-top: 8px; font-size: 0.7rem; }
+  .sat-card.open .card-expand { display: block; }
+  .card-expand .row { display: flex; justify-content: space-between; margin: 3px 0; }
+  .card-expand .label { color: var(--muted); }
+  .pass-info { margin-top: 6px; padding: 6px; background: var(--bg); border-radius: 4px; font-size: 0.68rem; }
+  .pass-info .ptitle { color: var(--accent); margin-bottom: 3px; }
+  .no-data { color: var(--muted); font-size: 0.75rem; text-align: center; padding: 20px; }
+  .loading-card { color: var(--muted); font-size: 0.72rem; text-align: center; padding: 16px; animation: blink 1s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* MAP */
+  #map-view { flex: 1; display: none; position: relative; }
+  #map { width: 100%; height: 100%; }
+  #map-legend {
+    position: absolute; bottom: 20px; left: 12px; z-index: 1000;
+    background: rgba(6,11,20,0.92); border: 1px solid var(--border);
+    border-radius: 6px; padding: 10px 14px; font-size: 0.72rem;
+  }
+  .legend-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+
+  #map-info-panel {
+    position: absolute; top: 12px; right: 12px; z-index: 1000;
+    background: rgba(6,11,20,0.95); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px; font-size: 0.75rem; min-width: 220px;
+    display: none;
+  }
+  #map-info-panel h3 { color: var(--accent); margin-bottom: 8px; font-size: 0.85rem; }
+  #map-info-panel .mi-row { display: flex; justify-content: space-between; margin: 4px 0; }
+  #map-info-panel .mi-label { color: var(--muted); }
+  #map-info-panel .mi-val { color: var(--text); font-weight: bold; }
+  #close-panel { float: right; cursor: pointer; color: var(--muted); font-size: 1rem; line-height: 1; }
+  #close-panel:hover { color: var(--text); }
+
+  /* Leaflet popup override */
+  .sat-map-icon {
+    filter: drop-shadow(0 0 4px rgba(0,200,255,0.7)) brightness(1.15);
+    transition: filter 0.2s;
+  }
+  .sat-map-icon:hover { filter: drop-shadow(0 0 8px #0ff) brightness(1.4); }
+  .leaflet-popup-tip { background: var(--card); }
+  .leaflet-popup-content { margin: 10px 14px; }
+
+  /* COUNTRIES VIEW */
+  #country-view { flex: 1; display: none; flex-direction: column; overflow: hidden; }
+  #country-toolbar {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 10px 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; flex-shrink: 0;
+  }
+  #country-select {
+    background: var(--card); border: 1px solid var(--border); color: var(--text);
+    padding: 6px 12px; border-radius: 5px; font-family: inherit; font-size: 0.85rem;
+    cursor: pointer; min-width: 280px;
+  }
+  #country-select:focus { outline: none; border-color: var(--accent); }
+  #country-stats { font-size: 0.75rem; color: var(--muted); }
+  #country-content { display: flex; flex: 1; overflow: hidden; }
+  #country-table-wrap { flex: 1; overflow-y: auto; padding: 12px; min-width: 0; }
+
+  /* ── Country view toggle ── */
+  .cv-toggle { display:flex; gap:6px; margin-left:auto; }
+  .cv-toggle button {
+    background: var(--card); border: 1px solid var(--border); color: var(--muted);
+    padding: 4px 12px; border-radius: 4px; font-family: inherit; font-size: 0.72rem;
+    cursor: pointer; letter-spacing: 0.5px; transition: all 0.15s;
+  }
+  .cv-toggle button.active { background: rgba(0,170,255,0.15); border-color: var(--accent); color: var(--accent); }
+  .cv-toggle button:hover { color: var(--accent); border-color: var(--accent); }
+
+  /* ── Country Kanban ── */
+  #country-kanban-wrap {
+    flex: 1; overflow-y: auto; padding: 16px; min-width: 0; display: none;
+  }
+  #country-kanban-wrap .ck-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 12px;
+  }
+  .ck-card {
+    background: linear-gradient(135deg, rgba(10,20,35,0.97) 0%, rgba(5,15,30,0.99) 100%);
+    border: 1px solid rgba(0,170,255,0.2);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 12px 14px;
+    cursor: pointer;
+    position: relative;
+    transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+    /* no overflow:hidden so expanded content grows naturally */
+  }
+  .ck-card::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 28px, rgba(0,200,255,0.02) 28px, rgba(0,200,255,0.02) 29px);
+    pointer-events: none;
+  }
+  .ck-card:hover { border-color: rgba(0,200,255,0.6); box-shadow: 0 0 16px rgba(0,200,255,0.12); transform: translateY(-1px); }
+  .ck-card.open { border-color: rgba(0,200,255,0.7); box-shadow: 0 0 20px rgba(0,200,255,0.15); }
+  .ck-sat-icon {
+    position: absolute; top: 10px; right: 12px;
+    width: 36px; height: 36px; object-fit: contain; opacity: 0.55;
+    filter: drop-shadow(0 0 4px rgba(0,200,255,0.4));
+    transition: opacity 0.2s;
+    pointer-events: none;
+  }
+  .ck-card:hover .ck-sat-icon, .ck-card.open .ck-sat-icon { opacity: 0.9; }
+  .ck-card-corner {
+    position: absolute; top: 8px; right: 54px; /* shifted left to make room for icon */
+    font-size: 0.6rem; color: var(--accent); opacity: 0.5; letter-spacing: 1px; font-family: monospace;
+  }
+  .ck-title {
+    font-size: 0.82rem; font-weight: bold; color: #d0eeff;
+    margin-bottom: 4px; letter-spacing: 0.5px;
+  }
+  .ck-type-badge {
+    display: inline-block; font-size: 0.6rem;
+    background: rgba(0,200,255,0.08); border: 1px solid rgba(0,200,255,0.25);
+    color: var(--accent); padding: 1px 6px; border-radius: 2px;
+    margin-bottom: 8px; letter-spacing: 0.5px;
+  }
+  .ck-agency { font-size: 0.62rem; color: var(--muted); margin-left: 5px; }
+  .ck-meta {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 3px 8px;
+    margin-bottom: 8px;
+  }
+  .ck-meta-item { font-size: 0.65rem; color: var(--muted); }
+  .ck-meta-item span { color: var(--text); font-weight: bold; margin-left: 3px; }
+  .ck-expand {
+    display: none; margin-top: 10px;
+    border-top: 1px solid rgba(0,200,255,0.15); padding-top: 10px;
+  }
+  .ck-card.open .ck-expand { display: block; }
+  .ck-desc {
+    font-size: 0.7rem; color: #7aaccc; line-height: 1.6;
+    min-height: 1.2em;
+  }
+  .ck-n2yo {
+    display: inline-block; margin-top: 8px;
+    font-size: 0.65rem; color: var(--accent); text-decoration: none; letter-spacing: 0.5px;
+  }
+  .ck-n2yo:hover { text-shadow: 0 0 8px var(--accent); }
+  .ck-card.selected { background: linear-gradient(135deg, rgba(0,170,255,0.1) 0%, rgba(0,100,180,0.08) 100%); border-color: rgba(0,200,255,0.5); }
+  .ck-card.selected .ck-title { color: #aee6ff; }
+  .ck-sel-tick {
+    position: absolute; bottom: 8px; right: 10px;
+    font-size: 0.6rem; color: var(--accent); opacity: 0;
+    transition: opacity 0.15s; letter-spacing: 0.5px;
+  }
+  .ck-card.selected .ck-sel-tick { opacity: 1; }
+  .ck-scan-line {
+    position: absolute; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(0,200,255,0.4), transparent);
+    animation: ck-scan 3s linear infinite; opacity: 0; pointer-events: none;
+  }
+  .ck-card.open .ck-scan-line { opacity: 1; }
+  @keyframes ck-scan { 0% { top: 0; } 100% { top: 100%; } }
+
+  /* ── Satellite table ── */
+  #sat-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
+  #sat-table thead th {
+    background: var(--surface); color: var(--muted); text-align: left;
+    padding: 7px 10px; border-bottom: 1px solid var(--border);
+    cursor: pointer; white-space: nowrap; user-select: none; position: sticky; top: 0; z-index: 2;
+  }
+  #sat-table thead th:hover { color: var(--accent); }
+  #sat-table tbody tr { border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.15s; }
+  #sat-table tbody tr:hover { background: var(--card-hover); }
+  #sat-table tbody tr.selected { background: rgba(0,170,255,0.12); }
+  #sat-table td { padding: 8px 10px; }
+  #sat-table td.name-col { color: #eaf; font-weight: bold; }
+  #sat-table td.norad-col { color: var(--accent); font-family: monospace; }
+  #sat-table td.period-col { color: var(--leo); }
+  #sat-table td.launch-col { color: var(--muted); font-size: 0.7rem; }
+  #sat-table td.intl-col { color: var(--muted); font-size: 0.7rem; }
+  .table-placeholder { text-align: center; padding: 60px 20px; color: var(--muted); font-size: 0.9rem; }
+  .table-placeholder .big { font-size: 3rem; margin-bottom: 10px; }
+
+  .tbl-select-all { background: transparent; border: 1px solid var(--border); color: var(--muted); padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 0.78rem; font-family: inherit; white-space: nowrap; }
+  .tbl-select-all:hover { border-color: var(--accent); color: var(--accent); }
+  #track-btn {
+    background: var(--accent); border: none; color: #000; padding: 6px 16px;
+    border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 0.82rem; font-weight: bold;
+    display: none; white-space: nowrap;
+  }
+  #track-btn:hover { opacity: 0.85; }
+  .loading-row td { color: var(--muted); text-align: center; padding: 30px; }
+
+  /* ── Map Modal ── */
+  #map-modal-overlay {
+    display: none; position: fixed; inset: 0; z-index: 9000;
+    background: rgba(0,0,0,0.85); backdrop-filter: blur(6px);
+    align-items: center; justify-content: center;
+  }
+  #map-modal-overlay.open { display: flex; }
+  #map-modal {
+    background: var(--surface);
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+    width: min(96vw, 1000px); height: min(90vh, 680px);
+    display: flex; flex-direction: column; overflow: hidden;
+    box-shadow: 0 0 60px rgba(0,200,255,0.25), 0 0 120px rgba(0,200,255,0.1), inset 0 0 30px rgba(0,200,255,0.03);
+    position: relative;
+  }
+  /* Corner brackets */
+  #map-modal::before, #map-modal::after {
+    content: ''; position: absolute; width: 20px; height: 20px; pointer-events: none; z-index: 10;
+  }
+  #map-modal::before {
+    top: -1px; left: -1px;
+    border-top: 2px solid var(--accent2); border-left: 2px solid var(--accent2);
+    box-shadow: -2px -2px 8px rgba(0,255,157,0.4);
+  }
+  #map-modal::after {
+    bottom: -1px; right: -1px;
+    border-bottom: 2px solid var(--accent2); border-right: 2px solid var(--accent2);
+    box-shadow: 2px 2px 8px rgba(0,255,157,0.4);
+  }
+  #map-modal-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px; border-bottom: 1px solid rgba(0,200,255,0.3); flex-shrink: 0;
+    background: linear-gradient(90deg, rgba(0,200,255,0.08) 0%, transparent 100%);
+    position: relative;
+  }
+  #map-modal-header::after {
+    content: ''; position: absolute; bottom: 0; left: 0;
+    width: 100%; height: 1px;
+    background: linear-gradient(90deg, var(--accent), transparent);
+  }
+  #map-modal-title {
+    font-family: var(--cyber); font-weight: bold; font-size: 0.9rem;
+    color: var(--accent); letter-spacing: 2px; text-transform: uppercase;
+    text-shadow: 0 0 10px var(--accent);
+  }
+  #map-modal-close {
+    background: none; border: 1px solid var(--hud-red); color: var(--hud-red);
+    padding: 3px 10px; border-radius: 2px; cursor: pointer; font-size: 0.85rem;
+    font-family: var(--cyber); letter-spacing: 1px; transition: all 0.2s;
+  }
+  #map-modal-close:hover { background: rgba(255,51,102,0.15); box-shadow: 0 0 10px rgba(255,51,102,0.4); }
+  #map-modal-status {
+    font-size: 0.75rem; color: var(--accent2); font-family: var(--mono);
+    letter-spacing: 1px;
+  }
+  #map-body { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+  #country-map { flex: 1; width: 100%; min-height: 0; background: #07111a; }
+  .leaflet-container { background: #07111a !important; }
+
+  /* ── Sci-Fi HUD Panel ── */
+  #sat-hud {
+    width: 280px; flex-shrink: 0;
+    background: rgba(2,8,16,0.97);
+    border-left: 1px solid rgba(0,200,255,0.2);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    position: relative;
+  }
+  #sat-hud::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    animation: hudscan 3s linear infinite;
+  }
+  @keyframes hudscan {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+  #hud-header {
+    padding: 10px 12px; border-bottom: 1px solid rgba(0,200,255,0.15);
+    font-family: var(--cyber); font-size: 0.65rem; color: var(--muted);
+    letter-spacing: 2px; text-transform: uppercase;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  #hud-signal {
+    display: flex; gap: 3px; align-items: center;
+  }
+  .hud-bar {
+    width: 3px; background: var(--accent);
+    animation: sigbar 1.5s ease-in-out infinite;
+  }
+  .hud-bar:nth-child(1) { height: 4px; animation-delay: 0s; }
+  .hud-bar:nth-child(2) { height: 7px; animation-delay: 0.2s; }
+  .hud-bar:nth-child(3) { height: 10px; animation-delay: 0.4s; }
+  .hud-bar:nth-child(4) { height: 7px; animation-delay: 0.6s; }
+  .hud-bar:nth-child(5) { height: 4px; animation-delay: 0.8s; }
+  @keyframes sigbar { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+  #hud-idle {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: var(--muted); font-size: 0.72rem; text-align: center; padding: 20px; gap: 12px;
+  }
+  #hud-idle .hud-icon { font-size: 2.5rem; opacity: 0.3; animation: pulse 3s infinite; }
+  #hud-idle span { font-family: var(--mono); letter-spacing: 1px; line-height: 1.6; }
+
+  #hud-data { flex: 1; overflow-y: auto; padding: 10px; display: none; flex-direction: column; gap: 8px; }
+  #hud-data::-webkit-scrollbar { width: 3px; }
+  #hud-data::-webkit-scrollbar-thumb { background: rgba(0,200,255,0.3); }
+
+  #hud-sat-name {
+    font-family: var(--cyber); font-size: 0.8rem; color: var(--accent);
+    text-shadow: 0 0 10px var(--accent); letter-spacing: 1px;
+    border-bottom: 1px solid rgba(0,200,255,0.2); padding-bottom: 8px; margin-bottom: 4px;
+    min-height: 1.2em;
+  }
+  .hud-section {
+    border: 1px solid rgba(0,200,255,0.12);
+    border-radius: 2px; padding: 8px;
+    background: rgba(0,200,255,0.03);
+    position: relative;
+  }
+  .hud-section-title {
+    font-family: var(--cyber); font-size: 0.55rem; color: var(--muted);
+    letter-spacing: 2px; text-transform: uppercase; margin-bottom: 6px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .hud-section-title::before {
+    content: ''; width: 8px; height: 1px; background: var(--accent);
+    box-shadow: 0 0 4px var(--accent);
+  }
+  .hud-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin: 4px 0; font-size: 0.7rem;
+  }
+  .hud-label { color: var(--muted); font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.5px; }
+  .hud-val {
+    color: var(--text); font-family: var(--mono); font-weight: bold;
+    font-size: 0.75rem; text-align: right;
+    min-width: 80px;
+  }
+  .hud-val.green { color: var(--hud-green); text-shadow: 0 0 6px rgba(0,255,157,0.5); }
+  .hud-val.blue  { color: var(--hud-blue);  text-shadow: 0 0 6px rgba(0,200,255,0.5); }
+  .hud-val.orange{ color: var(--hud-orange); text-shadow: 0 0 6px rgba(255,149,0,0.5); }
+  .hud-val.red   { color: var(--hud-red);   text-shadow: 0 0 6px rgba(255,51,102,0.5); }
+  .hud-val.purple{ color: #aa88ff; text-shadow: 0 0 6px rgba(170,136,255,0.5); }
+
+  /* Orbit diagram mini */
+  #hud-orbit-ring {
+    margin: 6px auto; width: 80px; height: 80px; position: relative;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .orbit-earth {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #3af, #024);
+    box-shadow: 0 0 6px rgba(0,100,255,0.6);
+    position: absolute;
+  }
+  .orbit-ring {
+    position: absolute; border-radius: 50%; border: 1px solid;
+    animation: orbitrot linear infinite;
+  }
+  .orbit-ring.leo  { width: 44px; height: 44px; border-color: rgba(0,255,136,0.4); animation-duration: 4s; }
+  .orbit-ring.meo  { width: 58px; height: 58px; border-color: rgba(255,215,0,0.3); animation-duration: 7s; }
+  .orbit-ring.geo  { width: 74px; height: 74px; border-color: rgba(255,68,102,0.25); animation-duration: 12s; }
+  @keyframes orbitrot { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  .orbit-sat {
+    position: absolute; width: 5px; height: 5px; border-radius: 50%;
+    top: -2.5px; left: 50%; margin-left: -2.5px;
+  }
+  .orbit-sat.active { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+
+  #hud-link { margin-top: 4px; }
+  #hud-link a {
+    display: block; text-align: center; padding: 5px;
+    border: 1px solid rgba(0,200,255,0.3); border-radius: 2px;
+    color: var(--accent); font-family: var(--cyber); font-size: 0.6rem;
+    letter-spacing: 1px; text-decoration: none; text-transform: uppercase;
+    transition: all 0.2s;
+  }
+  #hud-link a:hover {
+    background: rgba(0,200,255,0.1); box-shadow: 0 0 10px rgba(0,200,255,0.3);
+  }
+
+  /* Glitch cursor */
+  .typing-cursor {
+    display: inline-block; width: 2px; height: 1em; background: var(--accent);
+    vertical-align: middle; margin-left: 2px;
+    animation: blink 0.7s step-end infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+  /* ── Scrollbar global ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* ── Mobile ── */
+  @keyframes satpulse {
+    0%,100% { box-shadow: 0 0 8px #0af, 0 0 16px rgba(0,200,255,0.4); transform: scale(1); }
+    50%      { box-shadow: 0 0 14px #0af, 0 0 28px rgba(0,200,255,0.7); transform: scale(1.25); }
+  }
+
+  @media(max-width: 640px) {
+    /* ── Kanban ── */
+    #kanban-view { flex-direction: column; overflow-x: hidden; overflow-y: auto; }
+    .kb-col { min-width: unset; max-width: unset; max-height: 320px; }
+
+    /* ── Country toolbar ── */
+    #country-toolbar { flex-direction: column; align-items: flex-start; gap: 8px; }
+    #country-select { min-width: unset; width: 100%; }
+    #country-stats { display: none; }
+    #sat-table .intl-col, #sat-table .launch-col { display: none; }
+
+    /* ── Toolbar ── */
+    #toolbar h1 { font-size: 0.85rem; }
+    .view-btn { padding: 5px 8px; font-size: 0.65rem; }
+
+    /* ── Modal: full-screen, vertical split ── */
+    #map-modal { width: 100vw; height: 100dvh; border-radius: 0; border: none; }
+    #map-modal-header { padding: 7px 10px; }
+    #map-modal-title { font-size: 0.72rem; letter-spacing: 1px; }
+    #map-modal-status { font-size: 0.62rem; }
+    #map-modal-close { padding: 3px 8px; font-size: 0.72rem; }
+
+    /* ── Body: map top, HUD scrollable below ── */
+    #map-body { flex-direction: column; overflow: hidden; }
+    #country-map { flex: 0 0 52dvh; min-height: 0; }
+
+    /* ── HUD panel ── */
+    #sat-hud {
+      width: 100% !important;
+      border-left: none;
+      border-top: 1px solid rgba(0,200,255,0.25);
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+    }
+    #hud-header { padding: 6px 10px; }
+    #hud-idle {
+      flex-direction: row; gap: 10px; padding: 10px 14px;
+      justify-content: flex-start; text-align: left;
+    }
+    #hud-idle .hud-icon { font-size: 1.6rem; opacity: 0.35; }
+    #hud-idle span { font-size: 0.68rem; }
+
+    /* ── HUD data: single column, compact ── */
+    #hud-data {
+      display: flex !important;
+      flex-direction: column;
+      gap: 6px;
+      padding: 8px 10px;
+    }
+    #hud-sat-name { font-size: 0.9rem; padding-bottom: 6px; margin-bottom: 2px; }
+    .hud-section { padding: 6px 8px; }
+    .hud-section-title { font-size: 0.55rem; margin-bottom: 4px; }
+    .hud-row { margin: 3px 0; }
+    .hud-label { font-size: 0.64rem; }
+    .hud-val { font-size: 0.78rem; min-width: 70px; }
+    #hud-orbit-ring { display: none; }
+    #hv-desc-block { font-size: 0.7rem; }
+    #hud-link a { padding: 6px; font-size: 0.65rem; }
+  }
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <h1>🛸 Satellite Tracker</h1>
+  <button class="view-btn active" id="btn-kanban" onclick="switchView('kanban')">📋 Kanban</button>
+  <button class="view-btn" id="btn-map" onclick="switchView('map')">🗺️ Map</button>
+  <button class="view-btn" id="btn-countries" onclick="switchView('countries')">🌍 Countries</button>
+  <button class="loc-btn" onclick="detectLocation()">📍 My Location</button>
+  <span id="status-bar">
+    <span id="refresh-dot"></span>
+    <span id="last-update">Initializing...</span>
+  </span>
+</div>
+
+<!-- KANBAN VIEW -->
+<div id="kanban-view">
+  <div class="kb-col col-leo">
+    <div class="kb-col-header">🟢 LEO <span id="leo-count" style="font-size:0.7rem;opacity:0.6"></span></div>
+    <div class="kb-col-body" id="col-leo"><div class="loading-card">Loading satellites...</div></div>
+  </div>
+  <div class="kb-col col-meo">
+    <div class="kb-col-header">🟡 MEO <span id="meo-count" style="font-size:0.7rem;opacity:0.6"></span></div>
+    <div class="kb-col-body" id="col-meo"><div class="loading-card">Loading satellites...</div></div>
+  </div>
+  <div class="kb-col col-geo">
+    <div class="kb-col-header">🔴 GEO <span id="geo-count" style="font-size:0.7rem;opacity:0.6"></span></div>
+    <div class="kb-col-body" id="col-geo"><div class="loading-card">Loading satellites...</div></div>
+  </div>
+  <div class="kb-col col-deep">
+    <div class="kb-col-header">⚫ Deep Space <span id="deep-count" style="font-size:0.7rem;opacity:0.6"></span></div>
+    <div class="kb-col-body" id="col-deep"><div class="loading-card">Loading satellites...</div></div>
+  </div>
+</div>
+
+<!-- MAP VIEW -->
+<div id="map-view">
+  <div id="map"></div>
+  <div id="map-legend">
+    <div style="color:#aac;font-weight:bold;margin-bottom:6px;font-size:0.75rem;">ORBITAL ZONES</div>
+    <div class="legend-row"><div class="legend-dot" style="background:#00ff88"></div> LEO (160–2,000 km)</div>
+    <div class="legend-row"><div class="legend-dot" style="background:#ffd700"></div> MEO (2,000–35,786 km)</div>
+    <div class="legend-row"><div class="legend-dot" style="background:#ff4466"></div> GEO (~35,786 km)</div>
+    <div class="legend-row"><div class="legend-dot" style="background:#aa88ff"></div> Deep Space</div>
+  </div>
+  <div id="map-info-panel">
+    <span id="close-panel" onclick="document.getElementById('map-info-panel').style.display='none'">✕</span>
+    <h3 id="mi-name">—</h3>
+    <div class="mi-row"><span class="mi-label">Latitude</span><span class="mi-val" id="mi-lat">—</span></div>
+    <div class="mi-row"><span class="mi-label">Longitude</span><span class="mi-val" id="mi-lng">—</span></div>
+    <div class="mi-row"><span class="mi-label">Altitude</span><span class="mi-val" id="mi-alt">—</span></div>
+    <div class="mi-row"><span class="mi-label">Velocity</span><span class="mi-val" id="mi-vel">—</span></div>
+    <div class="mi-row"><span class="mi-label">Zone</span><span class="mi-val" id="mi-zone">—</span></div>
+    <div class="mi-row"><span class="mi-label">NORAD ID</span><span class="mi-val" id="mi-norad">—</span></div>
+  </div>
+</div>
+
+<!-- COUNTRIES VIEW -->
+<div id="country-view">
+  <div id="country-toolbar">
+    <select id="country-select" onchange="loadCountry(this.value)">
+      <option value="">🌍 — Select a Country / Agency —</option>
+      <option value="USA">🇺🇸 United States</option>
+      <option value="CIS">🇷🇺 CIS (Former USSR)</option>
+      <option value="PRC">🇨🇳 People's Republic of China</option>
+      <option value="JPN">🇯🇵 Japan</option>
+      <option value="ESA">🇪🇺 European Space Agency</option>
+      <option value="FR">🇫🇷 France</option>
+      <option value="IND">🇮🇳 India</option>
+      <option value="UK">🇬🇧 United Kingdom</option>
+      <option value="CA">🇨🇦 Canada</option>
+      <option value="GER">🇩🇪 Germany</option>
+    </select>
+    <span id="country-stats"></span>
+    <button class="tbl-select-all" onclick="toggleSelectAll()">☑ Select All</button>
+    <button id="track-btn" onclick="trackSelected()">🛰 Track Selected on Map</button>
+    <div class="cv-toggle">
+      <button id="cv-btn-table"   class="active" onclick="setCountryView('table')">⊞ TABLE</button>
+      <button id="cv-btn-kanban"          onclick="setCountryView('kanban')">▦ KANBAN</button>
+    </div>
+  </div>
+  <div id="country-content">
+    <div id="country-table-wrap">
+      <div class="table-placeholder" id="tbl-placeholder">
+        <div class="big">🌍</div>
+        Select a country above to view its satellites
+      </div>
+      <table id="sat-table" style="display:none">
+        <thead>
+          <tr>
+            <th onclick="sortTable('sel')" style="width:30px">☑</th>
+            <th onclick="sortTable('name')">Name ↕</th>
+            <th onclick="sortTable('norad')">NORAD ID ↕</th>
+            <th class="intl-col" onclick="sortTable('intl')">Int'l Code ↕</th>
+            <th class="launch-col" onclick="sortTable('launch')">Launch Date ↕</th>
+            <th onclick="sortTable('period')">Period [min] ↕</th>
+          </tr>
+        </thead>
+        <tbody id="sat-tbody"></tbody>
+      </table>
+    </div>
+    <div id="country-kanban-wrap">
+      <div class="ck-grid" id="ck-grid"></div>
+    </div>
+  </div>
+</div>
+
+<!-- MAP MODAL -->
+<div id="map-modal-overlay" onclick="closeMapModal(event)">
+  <div id="map-modal">
+    <div id="map-modal-header">
+      <div>
+        <div id="map-modal-title">SATELLITE TRACKING SYSTEM</div>
+        <div id="map-modal-status">AWAITING TARGET LOCK...</div>
+      </div>
+      <button id="map-modal-close" onclick="document.getElementById('map-modal-overlay').classList.remove('open')">✕ CLOSE</button>
+    </div>
+    <div id="map-body">
+      <div id="country-map"></div>
+      <div id="sat-hud">
+        <div id="hud-header">
+          <span>SAT TELEMETRY</span>
+          <div id="hud-signal">
+            <div class="hud-bar"></div><div class="hud-bar"></div>
+            <div class="hud-bar"></div><div class="hud-bar"></div>
+            <div class="hud-bar"></div>
+          </div>
+        </div>
+        <div id="hud-idle">
+          <div class="hud-icon">🛰</div>
+          <span>HOVER OVER A<br>SATELLITE NODE<br>TO ACQUIRE LOCK</span>
+        </div>
+        <div id="hud-data">
+          <div id="hud-sat-name">—</div>
+          <div class="hud-section">
+            <div class="hud-section-title">Position Data</div>
+            <div class="hud-row"><span class="hud-label">LATITUDE</span><span class="hud-val green" id="hv-lat">—</span></div>
+            <div class="hud-row"><span class="hud-label">LONGITUDE</span><span class="hud-val green" id="hv-lng">—</span></div>
+            <div class="hud-row"><span class="hud-label">ALTITUDE</span><span class="hud-val blue" id="hv-alt">—</span></div>
+          </div>
+          <div class="hud-section">
+            <div class="hud-section-title">Orbital Mechanics</div>
+            <div id="hud-orbit-ring">
+              <div class="orbit-earth"></div>
+              <div class="orbit-ring leo"><div class="orbit-sat" id="hud-dot-leo"></div></div>
+              <div class="orbit-ring meo"><div class="orbit-sat" id="hud-dot-meo"></div></div>
+              <div class="orbit-ring geo"><div class="orbit-sat" id="hud-dot-geo"></div></div>
+            </div>
+            <div class="hud-row"><span class="hud-label">VELOCITY</span><span class="hud-val orange" id="hv-vel">—</span></div>
+            <div class="hud-row"><span class="hud-label">ORBIT TYPE</span><span class="hud-val purple" id="hv-orbit">—</span></div>
+            <div class="hud-row"><span class="hud-label">PERIOD</span><span class="hud-val" id="hv-period">—</span></div>
+          </div>
+          <div class="hud-section">
+            <div class="hud-section-title">Identification</div>
+            <div class="hud-row"><span class="hud-label">NORAD ID</span><span class="hud-val blue" id="hv-norad">—</span></div>
+            <div class="hud-row"><span class="hud-label">INTL CODE</span><span class="hud-val" id="hv-intl">—</span></div>
+            <div class="hud-row"><span class="hud-label">LAUNCH</span><span class="hud-val" id="hv-launch">—</span></div>
+          </div>
+          <div id="hud-link"><a href="#" id="hv-n2yo" target="_blank">⟶ TRACK ON N2YO</a></div>
+          <div id="hv-desc-block" style="display:none;margin-top:8px;border-top:1px solid rgba(0,200,255,0.15);padding-top:8px">
+            <div class="hud-section-title" style="margin-bottom:4px">Mission</div>
+            <div id="hv-sat-type" style="font-size:0.68rem;color:var(--accent);margin-bottom:4px;letter-spacing:1px"></div>
+            <div id="hv-sat-desc" style="font-size:0.7rem;color:#7aaccc;line-height:1.5;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// CONFIG
+// ============================================================
+// API key moved to server-side Vercel env variable (N2YO_KEY)
+// All requests go through /api/n2yo proxy to avoid CORS and expose key
+const N2YO_PROXY = '/api/n2yo';
+
+// Observer location (default: London)
+let observer = { lat: 51.5074, lng: -0.1278, alt: 0 };
+
+// ============================================================
+// SATELLITE CATALOG
+// ============================================================
+const SATELLITES = [
+  // LEO
+  { norad: 25544, name: 'ISS (Zarya)',         zone: 'LEO',  icon: '🌍', flag: 'NASA/Roscosmos' },
+  { norad: 20580, name: 'Hubble Telescope',     zone: 'LEO',  icon: '🔭', flag: 'NASA' },
+  { norad: 27607, name: 'Aqua',                 zone: 'LEO',  icon: '🌊', flag: 'NASA' },
+  { norad: 25994, name: 'Terra',                zone: 'LEO',  icon: '🌱', flag: 'NASA' },
+  { norad: 44713, name: 'Starlink-1007',        zone: 'LEO',  icon: '📡', flag: 'SpaceX' },
+  { norad: 44714, name: 'Starlink-1008',        zone: 'LEO',  icon: '📡', flag: 'SpaceX' },
+  { norad: 43013, name: 'NOAA-20',              zone: 'LEO',  icon: '🌦️', flag: 'NOAA' },
+  { norad: 33591, name: 'NOAA-19',              zone: 'LEO',  icon: '🌦️', flag: 'NOAA' },
+  { norad: 39084, name: 'Landsat 8',            zone: 'LEO',  icon: '🗺️', flag: 'USGS' },
+  { norad: 43013, name: 'Suomi NPP',            zone: 'LEO',  icon: '🌡️', flag: 'NASA/NOAA' },
+  // MEO
+  { norad: 28474, name: 'GPS BIIR-2',           zone: 'MEO',  icon: '📍', flag: 'USAF' },
+  { norad: 28190, name: 'GPS BIIR-1',           zone: 'MEO',  icon: '📍', flag: 'USAF' },
+  { norad: 36585, name: 'Galileo-1',            zone: 'MEO',  icon: '🇪🇺', flag: 'ESA' },
+  { norad: 36586, name: 'Galileo-2',            zone: 'MEO',  icon: '🇪🇺', flag: 'ESA' },
+  { norad: 28361, name: 'GLONASS-M 714',        zone: 'MEO',  icon: '🇷🇺', flag: 'Roscosmos' },
+  // GEO
+  { norad: 41866, name: 'GOES-16',              zone: 'GEO',  icon: '🌩️', flag: 'NOAA' },
+  { norad: 43226, name: 'GOES-17',              zone: 'GEO',  icon: '🌩️', flag: 'NOAA' },
+  { norad: 51850, name: 'GOES-18',              zone: 'GEO',  icon: '🌩️', flag: 'NOAA' },
+  { norad: 40732, name: 'Intelsat 34',          zone: 'GEO',  icon: '📺', flag: 'Intelsat' },
+  { norad: 27844, name: 'XM-3',                 zone: 'GEO',  icon: '📻', flag: 'SiriusXM' },
+  // Deep Space (use static known positions since N2YO may not track)
+  { norad: 49044, name: 'James Webb ST',        zone: 'DEEP', icon: '🌌', flag: 'NASA/ESA' },
+  { norad: 20580, name: 'Chandra X-ray',        zone: 'DEEP', icon: '☢️',  flag: 'NASA' },
+];
+
+// ============================================================
+// SATELLITE INFO DATABASE (from satellite-info.txt)
+// Keyed by NORAD ID — descriptions for country view & kanban details
+// ============================================================
+const SAT_INFO = {
+  // ── CIS / Russia ──────────────────────────────────────────────
+  68837: { desc: "Automated Russian cargo spacecraft delivering food, fuel, scientific equipment, water, oxygen, and spare parts to the ISS. Also boosts ISS orbit and disposes of waste.", type: "Cargo Resupply", agency: "Roscosmos" },
+  68829: { desc: "Supports Russian military intelligence, surveillance, communications, or electronic reconnaissance missions. Exact functions remain classified.", type: "Military Intel", agency: "Russian MoD" },
+  68828: { desc: "Likely part of Russia's defense satellite network for reconnaissance, missile warning, secure communications, or orbital testing.", type: "Military", agency: "Russian MoD" },
+  68827: { desc: "Classified Russian military spacecraft possibly designed for electronic intelligence gathering, Earth observation, or secure communications supporting national defense.", type: "ELINT / EO", agency: "Russian MoD" },
+  68826: { desc: "Likely used for reconnaissance, military communications, or experimental orbital technologies under Russia's classified Kosmos program.", type: "Military", agency: "Russian MoD" },
+  68764: { desc: "Part of Russia's classified Kosmos series, probably supporting military surveillance, signals intelligence, or strategic communications for national security.", type: "SIGINT", agency: "Russian MoD" },
+  68763: { desc: "Likely intended for military intelligence operations including reconnaissance, electronic monitoring, or communications relay.", type: "Military Intel", agency: "Russian MoD" },
+  68762: { desc: "Defense-oriented satellite potentially supporting surveillance, navigation, missile detection, or military communications within Russia's orbital security network.", type: "Defense", agency: "Russian MoD" },
+  68759: { desc: "Classified military operations including Earth observation, electronic reconnaissance, or secure communications for Russian armed forces and intelligence agencies.", type: "ELINT / Recon", agency: "Russian MoD" },
+  68758: { desc: "Part of Russia's long-running Kosmos satellite family, likely supporting military intelligence, navigation systems, or strategic defense communications.", type: "Military", agency: "Russian MoD" },
+  68754: { desc: "Classified Russian satellite possibly used for reconnaissance, missile-warning support, or secure communications within Russia's military space operations network.", type: "Early Warning / Recon", agency: "Russian MoD" },
+  68571: { desc: "Military communications satellite providing secure services to Russian armed forces, Arctic regions, ships, aircraft, and remote northern territories.", type: "Secure Comms", agency: "Roscosmos / MoD" },
+  68375: { desc: "Part of a multi-satellite group likely designed for communications, relay services, or experimental networking for Russian orbital infrastructure.", type: "Comms / Relay", agency: "Roscosmos" },
+  68374: { desc: "Part of the Rassvet-3 constellation supporting communications, relay, or experimental networking for Russian civilian or military orbital infrastructure.", type: "Comms / Relay", agency: "Roscosmos" },
+  68373: { desc: "Rassvet-3 group satellite supporting Russian orbital communication or relay networks.", type: "Comms / Relay", agency: "Roscosmos" },
+  68372: { desc: "Rassvet-3 group satellite supporting Russian orbital communication or relay networks.", type: "Comms / Relay", agency: "Roscosmos" },
+  68371: { desc: "Rassvet-3 group satellite supporting Russian orbital communication or relay networks.", type: "Comms / Relay", agency: "Roscosmos" },
+  68360: { desc: "Lead satellite of the Rassvet-3 constellation supporting communications or relay services for Russian orbital communication infrastructure.", type: "Comms / Relay", agency: "Roscosmos" },
+  68319: { desc: "Automated cargo spacecraft supplying the ISS with food, equipment, fuel, scientific payloads, and orbital correction capabilities.", type: "Cargo Resupply", agency: "Roscosmos" },
+  67756: { desc: "Geostationary meteorological satellite monitoring weather systems, storms, climate conditions, and environmental activity across Russia and neighboring regions using infrared and visible imaging.", type: "Meteorology", agency: "Roscosmos / Roshydromet" },
+  // ── China ─────────────────────────────────────────────────────
+  68835: { desc: "Experimental or remote-sensing satellite supporting scientific research, Earth observation, environmental monitoring, or technology validation within China's commercial space program.", type: "Remote Sensing / Experimental", agency: "CNSA" },
+  68834: { desc: "Part of the Huanjing Shiyan experimental satellite program, believed to support military surveillance, signals intelligence, or technology testing for China's defense operations.", type: "Military Surveillance", agency: "PLA" },
+  68833: { desc: "Classified Chinese satellite likely used for reconnaissance, communications testing, or electronic intelligence collection under military or strategic experimental missions.", type: "ELINT / Recon", agency: "PLA" },
+  68832: { desc: "Supports China's military surveillance and intelligence capabilities, possibly involving electronic monitoring, imaging systems, or experimental orbital technologies.", type: "Military Intel", agency: "PLA" },
+  68831: { desc: "Part of China's experimental defense-oriented satellite network, likely focused on reconnaissance, secure communications, or testing advanced military space technologies.", type: "Defense / Experimental", agency: "PLA" },
+  68760: { desc: "Designed to study Earth's atmosphere, pollution, greenhouse gases, and climate conditions using advanced sensors for environmental research and air-quality monitoring.", type: "Atmospheric Science", agency: "CNSA" },
+  68687: { desc: "Classified experimental spacecraft potentially supporting surveillance, electronic intelligence gathering, or advanced orbital systems research for Chinese defense applications.", type: "Defense / Experimental", agency: "PLA" },
+  68660: { desc: "Part of China's low-Earth-orbit broadband internet constellation providing high-speed communication services, data connectivity, and satellite networking capabilities.", type: "Broadband Internet", agency: "CASC" },
+  68659: { desc: "Supports China's expanding satellite internet infrastructure by enabling broadband communications, network coverage, and future global connectivity services from LEO.", type: "Broadband Internet", agency: "CASC" },
+  68658: { desc: "Communications satellite within China's broadband constellation aimed at delivering internet access, data relay, and advanced orbital networking technologies.", type: "Broadband Internet", agency: "CASC" },
+  48274: { desc: "Core module of China's space station, providing astronaut living quarters, power systems, docking ports, life-support functions, and scientific research facilities in orbit.", type: "Space Station", agency: "CNSA" },
+  49807: { desc: "Advanced geostationary meteorological satellite monitoring storms, typhoons, atmospheric conditions, climate activity, and environmental changes using high-resolution imaging sensors.", type: "Meteorology", agency: "CMA / CNSA" },
+  // ── Japan ─────────────────────────────────────────────────────
+  68795: { desc: "Technology-demonstration satellite testing lightweight deployable structures inspired by origami engineering for future communication antennas, solar panels, and compact spacecraft designs.", type: "Tech Demo", agency: "Tokyo Tech / JAXA" },
+  68291: { desc: "Synthetic aperture radar satellite providing high-resolution Earth imaging regardless of weather or daylight, for disaster monitoring, agriculture, infrastructure, and maritime surveillance.", type: "SAR / Earth Obs", agency: "Synspective" },
+  68261: { desc: "Experimental spacecraft testing advanced satellite systems, onboard electronics, and miniaturized technologies for future Japanese scientific and commercial space missions.", type: "Tech Demo", agency: "Kyushu University" },
+  67228: { desc: "Radar imaging satellite delivering high-resolution Earth observation data for disaster response, mapping, infrastructure monitoring, defense, and environmental analysis day or night.", type: "SAR / Earth Obs", agency: "QPS Institute" },
+  67073: { desc: "Experimental small satellite testing innovative communication, sensing, and spacecraft technologies developed by Japanese universities and research institutions.", type: "Experimental", agency: "JAXA / Universities" },
+  66316: { desc: "Commercial radar satellite providing frequent Earth imaging for disaster tracking, flood analysis, security surveillance, and geospatial intelligence services.", type: "SAR / Earth Obs", agency: "QPS Institute" },
+  66174: { desc: "Japan's next-generation cargo spacecraft supplying the ISS with food, experiments, equipment, and advanced logistics support capabilities.", type: "Cargo Resupply", agency: "JAXA" },
+  65971: { desc: "SAR satellite providing high-resolution radar Earth imaging for disaster monitoring, agriculture, infrastructure inspection, and maritime surveillance.", type: "SAR / Earth Obs", agency: "Synspective" },
+  64694: { desc: "Monitors greenhouse gases, climate conditions, and water cycles to improve environmental research, climate prediction, and global warming analysis.", type: "Climate Science", agency: "JAXA" },
+  64340: { desc: "Supports rapid Earth observation using synthetic aperture radar for terrain mapping, infrastructure assessment, environmental studies, and defense imaging.", type: "SAR / Earth Obs", agency: "QPS Institute" },
+  64055: { desc: "Commercial radar satellite providing high-frequency observation for commercial analytics, disaster relief, and monitoring critical infrastructure.", type: "SAR / Earth Obs", agency: "QPS Institute" },
+  63205: { desc: "Part of Japan's radar observation constellation enabling all-weather imaging for emergency management, urban monitoring, agriculture, and maritime security.", type: "SAR / Earth Obs", agency: "QPS Institute" },
+  62876: { desc: "Part of Japan's Quasi-Zenith Satellite System enhancing GPS accuracy for navigation, transportation, smartphones, autonomous vehicles, and disaster response across Asia-Pacific.", type: "Navigation (GNSS)", agency: "JAXA / Cabinet Office" },
+  62406: { desc: "Synthetic aperture radar satellite delivering precise Earth observation imagery for environmental monitoring, security, and infrastructure analysis regardless of weather.", type: "SAR / Earth Obs", agency: "Synspective" },
+  61733: { desc: "Provides secure communications for Japan's defense forces, supporting military operations, strategic coordination, and reliable data transmission across remote regions.", type: "Military Comms", agency: "Japan MoD" },
+  61439: { desc: "Intelligence-gathering radar satellite monitoring military activities, disasters, and regional security threats using high-resolution all-weather imaging technology.", type: "Recon / SAR", agency: "Cabinet Intelligence / Japan Gov" },
+  60542: { desc: "Radar imaging satellite designed for high-frequency observation of Earth's surface, supporting commercial analytics, disaster relief, and monitoring critical infrastructure.", type: "SAR / Earth Obs", agency: "QPS Institute" },
+  60182: { desc: "Advanced land observation satellite using radar sensors for disaster management, environmental studies, mapping, forestry monitoring, and infrastructure assessment.", type: "SAR / Land Obs", agency: "JAXA" },
+  62717: { desc: "Commercial lunar exploration spacecraft developed for Moon landing missions, carrying scientific payloads and testing technologies for future lunar transportation services.", type: "Lunar Exploration", agency: "ispace" },
+  // ── ESA ───────────────────────────────────────────────────────
+  68409: { desc: "Tests resilient positioning, navigation, and timing technologies designed to improve Europe's secure navigation infrastructure against interference and signal disruptions.", type: "PNT / Navigation Tech Demo", agency: "ESA" },
+  68408: { desc: "Supports experimental navigation and timing systems research aimed at improving secure satellite-based positioning and communication reliability across Europe.", type: "PNT / Navigation Tech Demo", agency: "ESA" },
+  66820: { desc: "High-resolution imaging satellite for environmental monitoring, urban planning, agriculture, defense reconnaissance, and disaster response applications.", type: "Earth Obs / Imaging", agency: "KARI (ESA co-launch)" },
+  66763: { desc: "Studies soil moisture, wetlands, floods, and freeze-thaw conditions using reflected GNSS signals to improve climate and hydrological monitoring worldwide.", type: "Hydrology / Climate", agency: "ESA" },
+  66762: { desc: "Studies soil moisture, wetlands, and hydrological conditions using GNSS-reflectometry to improve global climate and water cycle monitoring.", type: "Hydrology / Climate", agency: "ESA" },
+  66315: { desc: "Provides all-weather radar imaging for environmental monitoring, disaster management, maritime surveillance, land mapping, and climate research under Copernicus.", type: "SAR / Copernicus", agency: "ESA" },
+  65159: { desc: "Next-generation meteorological satellite improving weather forecasting, atmospheric monitoring, and climate research across Europe and globally.", type: "Meteorology", agency: "EUMETSAT / ESA" },
+  63772: { desc: "Measures global forest biomass and carbon storage using advanced P-band radar technology to improve climate change and ecosystem research.", type: "Forestry / Climate Science", agency: "ESA" },
+  62261: { desc: "Supports continuous Earth monitoring through radar imaging, enabling flood tracking, ice monitoring, agriculture analysis, and infrastructure assessment under Copernicus.", type: "SAR / Copernicus", agency: "ESA" },
+  62258: { desc: "Proba-3 Occulter spacecraft demonstrating precision formation flying at 144–60,530 km to study the Sun's corona and test autonomous orbital operations.", type: "Solar Science / Formation Flying", agency: "ESA" },
+  62256: { desc: "Proba-3 Coronagraph spacecraft working with the Occulter to create an artificial solar eclipse, enabling detailed study of the Sun's outer atmosphere.", type: "Solar Science / Formation Flying", agency: "ESA" },
+  61183: { desc: "Galileo navigation satellite providing precise positioning, timing, and navigation services for civilian and commercial users across Europe and globally.", type: "Navigation (GNSS)", agency: "ESA / EC" },
+  61182: { desc: "Galileo navigation satellite extending Europe's global navigation constellation for accurate positioning and timing services.", type: "Navigation (GNSS)", agency: "ESA / EC" },
+  60989: { desc: "Captures high-resolution multispectral optical imagery for agriculture, forestry, environmental monitoring, urban planning, and climate observation under Copernicus.", type: "Optical EO / Copernicus", agency: "ESA" },
+  59600: { desc: "Galileo navigation satellite delivering centimetre-level positioning accuracy for transport, agriculture, search & rescue, and timing applications.", type: "Navigation (GNSS)", agency: "ESA / EC" },
+  59598: { desc: "Galileo MEO navigation satellite providing precise global positioning and timing signals as part of Europe's independent GNSS.", type: "Navigation (GNSS)", agency: "ESA / EC" },
+  57209: { desc: "Space observatory studying dark matter, dark energy, and the large-scale structure of the universe to better understand cosmic expansion and geometry.", type: "Space Science / Cosmology", agency: "ESA" },
+  50463: { desc: "Infrared space observatory exploring early galaxies, exoplanets, star formation, and deep-space phenomena with unprecedented sensitivity and angular resolution.", type: "Space Telescope", agency: "NASA / ESA / CSA" },
+  46984: { desc: "Monitors global sea-level rise and ocean circulation with highly accurate radar altimetry supporting climate science and improved weather forecasting.", type: "Altimetry / Oceanography", agency: "ESA / EUMETSAT / NASA" },
+  44874: { desc: "Characterises known exoplanets by measuring their sizes, bulk densities, and orbital properties to improve understanding of planetary systems beyond Earth.", type: "Exoplanet Science", agency: "ESA" },
+  44475: { desc: "Provides near real-time high-bandwidth data relay between LEO Earth observation satellites and ground stations using advanced laser communication technology.", type: "Data Relay (Laser)", agency: "ESA / Airbus" },
+  43567: { desc: "Galileo navigation satellite in MEO providing global positioning, navigation, and timing services for Europe's independent GNSS constellation.", type: "Navigation (GNSS)", agency: "ESA / EC" },
+  43437: { desc: "Measures sea surface temperatures, ocean color, vegetation, land-surface temperature, and atmospheric aerosols for Copernicus environmental and climate programmes.", type: "Ocean / Land / Atmosphere", agency: "ESA" },
+  // ── France ────────────────────────────────────────────────────
+  68503: { desc: "Small satellite testing educational, communication, or experimental technologies developed for research, academic, and commercial space innovation programs.", type: "Experimental / CubeSat", agency: "CNES / Laboratoire" },
+  68472: { desc: "Supports technology validation and scientific experiments related to small satellite systems, communications, and Earth observation research.", type: "Experimental / CubeSat", agency: "CNES / Laboratoire" },
+  68424: { desc: "Experimental spacecraft designed for orbital technology demonstrations, communication systems testing, and future commercial satellite applications.", type: "Tech Demo", agency: "Unseenlabs" },
+  68422: { desc: "Compact satellite supporting scientific experiments, communications research, or Earth observation missions within France's smallsat ecosystem.", type: "RF Monitoring", agency: "Unseenlabs" },
+  40053: { desc: "High-resolution optical satellite providing imagery for mapping, agriculture, defense, disaster management, and environmental monitoring applications worldwide.", type: "Optical EO", agency: "Airbus DS" },
+  38755: { desc: "High-resolution imaging satellite supporting defense intelligence, mapping, disaster response, and environmental monitoring with sub-metre optical observations.", type: "Optical EO / Defense", agency: "Airbus DS" },
+  37619: { desc: "Works alongside Pléiades 1B to provide rapid high-resolution stereo Earth imagery for military, scientific, and commercial observation missions.", type: "Optical EO / Defense", agency: "Airbus DS" },
+  // ── India ─────────────────────────────────────────────────────
+  66311: { desc: "Provides communication and broadcasting services across India, supporting television transmission, telecommunications, and digital connectivity in remote regions.", type: "Communications", agency: "ISRO" },
+  65053: { desc: "Joint India-US dual-frequency L-band and S-band SAR mission studying earthquakes, glaciers, forests, land deformation, and climate-related environmental changes.", type: "SAR / Earth Science", agency: "ISRO / NASA" },
+  62850: { desc: "Enhances India's NavIC navigation constellation for transportation, disaster response, military operations, and civilian regional positioning services.", type: "Navigation (NavIC)", agency: "ISRO" },
+  62460: { desc: "Supports India's development of advanced rendezvous and docking capabilities required for long-duration spaceflight and modular orbital missions.", type: "Tech Demo (Docking)", agency: "ISRO" },
+  62459: { desc: "Tests autonomous docking technologies essential for future Indian space stations, crewed missions, and orbital servicing operations.", type: "Tech Demo (Docking)", agency: "ISRO" },
+  62028: { desc: "Provides broadband connectivity, high-throughput communication services, and digital infrastructure for internet access across India's remote and rural regions.", type: "HTS Comms", agency: "ISRO / NSIL" },
+  60454: { desc: "Provides high-resolution Earth imaging for environmental monitoring, disaster management, urban planning, and strategic applications from LEO.", type: "Earth Obs / Imaging", agency: "ISRO" },
+  59442: { desc: "Technology demonstration satellite supporting scientific experiments, communication systems testing, and advanced Indian space research initiatives.", type: "Tech Demo", agency: "ISRO" },
+  58990: { desc: "Improves weather forecasting, storm tracking, climate monitoring, and disaster warning services using advanced meteorological instruments from GEO.", type: "Meteorology", agency: "ISRO / IMD" },
+  58694: { desc: "Studies cosmic X-ray sources, black holes, neutron stars, and high-energy astronomical phenomena using advanced polarimetry instruments.", type: "X-ray Astronomy", agency: "ISRO" },
+  57754: { desc: "India's first solar mission studying the Sun's corona, solar winds, magnetic fields, and space weather effects from the Sun-Earth Lagrange-1 point.", type: "Solar Science", agency: "ISRO" },
+  56759: { desc: "Part of India's NavIC system providing accurate regional positioning, navigation, and timing services across India and surrounding regions.", type: "Navigation (NavIC)", agency: "ISRO" },
+  54361: { desc: "Studies ocean surface temperatures, weather systems, wind patterns, and climate conditions supporting marine and meteorological research.", type: "Oceanography / Meteorology", agency: "ISRO" },
+  52903: { desc: "Provides communication and broadcasting services supporting India's television, telecommunications, and VSAT connectivity.", type: "Communications", agency: "ISRO" },
+  51656: { desc: "All-weather radar imaging satellite monitoring agriculture, forestry, floods, and environmental changes using C-band SAR.", type: "SAR / Earth Obs", agency: "ISRO" },
+  47256: { desc: "Provides communication and broadcasting services across India, supporting television transmission, telecommunications, and digital connectivity.", type: "Communications", agency: "ISRO" },
+  46905: { desc: "Supports military surveillance, border monitoring, disaster management, and environmental observation through high-resolution X-band SAR imaging.", type: "SAR / Defense", agency: "ISRO" },
+  45026: { desc: "Supports television broadcasting, telecommunications, VSAT networks, and secure communication services throughout the Indian subcontinent.", type: "Communications", agency: "ISRO" },
+  44804: { desc: "Very high-resolution sub-metre optical satellite used for urban planning, mapping, defense intelligence, and infrastructure monitoring.", type: "Optical EO / Defense", agency: "ISRO" },
+  44233: { desc: "All-weather surveillance, reconnaissance, agriculture monitoring, and disaster observation using X-band synthetic aperture radar technology.", type: "SAR / Defense", agency: "ISRO" },
+  // ── China (Qianfan / Thousand Sails broadband constellation) ──
+  68654: { desc: "Part of China's Qianfan (Thousand Sails) LEO broadband internet megaconstellation providing global high-speed connectivity and data relay services.", type: "Broadband Internet", agency: "Shanghai Spacecom / CASC" },
+  68653: { desc: "Part of China's Qianfan (Thousand Sails) LEO broadband internet megaconstellation providing global high-speed connectivity and data relay services.", type: "Broadband Internet", agency: "Shanghai Spacecom / CASC" },
+  68652: { desc: "Part of China's Qianfan (Thousand Sails) LEO broadband internet megaconstellation providing global high-speed connectivity and data relay services.", type: "Broadband Internet", agency: "Shanghai Spacecom / CASC" },
+  68651: { desc: "Part of China's Qianfan (Thousand Sails) LEO broadband internet megaconstellation providing global high-speed connectivity and data relay services.", type: "Broadband Internet", agency: "Shanghai Spacecom / CASC" },
+  68650: { desc: "Part of China's Qianfan (Thousand Sails) LEO broadband internet megaconstellation providing global high-speed connectivity and data relay services.", type: "Broadband Internet", agency: "Shanghai Spacecom / CASC" },
+  68649: { desc: "Part of China's Qianfan (Thousand Sails) LEO broadband internet megaconstellation providing global high-speed connectivity and data relay services.", type: "Broadband Internet", agency: "Shanghai Spacecom / CASC" },
+  68648: { desc: "Part of China's Qianfan (Thousand Sails) LEO broadband internet megaconstellation providing global high-speed connectivity and data relay services.", type: "Broadband Internet", agency: "Shanghai Spacecom / CASC" },
+  68647: { desc: "Part of China's Qianfan (Thousand Sails) LEO broadband internet megaconstellation providing global high-speed connectivity and data relay services.", type: "Broadband Internet", agency: "Shanghai Spacecom / CASC" },
+  68646: { desc: "Part of China's Qianfan (Thousand Sails) LEO broadband internet megaconstellation providing global high-speed connectivity and data relay services.", type: "Broadband Internet", agency: "Shanghai Spacecom / CASC" },
+  68645: { desc: "Part of China's Qianfan (Thousand Sails) LEO broadband internet megaconstellation providing global high-speed connectivity and data relay services.", type: "Broadband Internet", agency: "Shanghai Spacecom / CASC" },
+  68644: { desc: "Part of China's Qianfan (Thousand Sails) LEO broadband internet megaconstellation providing global high-speed connectivity and data relay services.", type: "Broadband Internet", agency: "Shanghai Spacecom / CASC" },
+  68643: { desc: "Part of China's Qianfan (Thousand Sails) LEO broadband internet megaconstellation providing global high-speed connectivity and data relay services.", type: "Broadband Internet", agency: "Shanghai Spacecom / CASC" },
+  68642: { desc: "Part of China's Qianfan (Thousand Sails) LEO broadband internet megaconstellation providing global high-speed connectivity and data relay services.", type: "Broadband Internet", agency: "Shanghai Spacecom / CASC" },
+  68641: { desc: "Part of China's Qianfan (Thousand Sails) LEO broadband internet megaconstellation providing global high-speed connectivity and data relay services.", type: "Broadband Internet", agency: "Shanghai Spacecom / CASC" },
+  68640: { desc: "Part of China's Qianfan (Thousand Sails) LEO broadband internet megaconstellation providing global high-speed connectivity and data relay services.", type: "Broadband Internet", agency: "Shanghai Spacecom / CASC" },
+  68639: { desc: "Part of China's Qianfan (Thousand Sails) LEO broadband internet megaconstellation providing global high-speed connectivity and data relay services.", type: "Broadband Internet", agency: "Shanghai Spacecom / CASC" },
+  68638: { desc: "Part of China's Qianfan (Thousand Sails) LEO broadband internet megaconstellation providing global high-speed connectivity and data relay services.", type: "Broadband Internet", agency: "Shanghai Spacecom / CASC" },
+  68637: { desc: "Part of China's Qianfan (Thousand Sails) LEO broadband internet megaconstellation providing global high-speed connectivity and data relay services.", type: "Broadband Internet", agency: "Shanghai Spacecom / CASC" },
+  // ── Japan ─────────────────────────────────────────────────────
+  60352: { desc: "Synthetic aperture radar satellite providing all-weather high-resolution Earth imaging for disaster monitoring, urban analysis, infrastructure inspection, and maritime surveillance.", type: "SAR / Earth Obs", agency: "Synspective" },
+  // ── France / Amazon Kuiper (Ariane 6 launch) ──────────────────
+  67795: { desc: "Amazon Kuiper LEO broadband satellite providing high-speed internet connectivity as part of Amazon's global commercial broadband constellation.", type: "Broadband Internet", agency: "Amazon / Kuiper Systems" },
+  67794: { desc: "Amazon Kuiper LEO broadband satellite providing high-speed internet connectivity as part of Amazon's global commercial broadband constellation.", type: "Broadband Internet", agency: "Amazon / Kuiper Systems" },
+  67793: { desc: "Amazon Kuiper LEO broadband satellite providing high-speed internet connectivity as part of Amazon's global commercial broadband constellation.", type: "Broadband Internet", agency: "Amazon / Kuiper Systems" },
+  67792: { desc: "Amazon Kuiper LEO broadband satellite providing high-speed internet connectivity as part of Amazon's global commercial broadband constellation.", type: "Broadband Internet", agency: "Amazon / Kuiper Systems" },
+  67791: { desc: "Amazon Kuiper LEO broadband satellite providing high-speed internet connectivity as part of Amazon's global commercial broadband constellation.", type: "Broadband Internet", agency: "Amazon / Kuiper Systems" },
+  67790: { desc: "Amazon Kuiper LEO broadband satellite providing high-speed internet connectivity as part of Amazon's global commercial broadband constellation.", type: "Broadband Internet", agency: "Amazon / Kuiper Systems" },
+  67789: { desc: "Amazon Kuiper LEO broadband satellite providing high-speed internet connectivity as part of Amazon's global commercial broadband constellation.", type: "Broadband Internet", agency: "Amazon / Kuiper Systems" },
+  67788: { desc: "Amazon Kuiper LEO broadband satellite providing high-speed internet connectivity as part of Amazon's global commercial broadband constellation.", type: "Broadband Internet", agency: "Amazon / Kuiper Systems" },
+  67787: { desc: "Amazon Kuiper LEO broadband satellite providing high-speed internet connectivity as part of Amazon's global commercial broadband constellation.", type: "Broadband Internet", agency: "Amazon / Kuiper Systems" },
+  67786: { desc: "Amazon Kuiper LEO broadband satellite providing high-speed internet connectivity as part of Amazon's global commercial broadband constellation.", type: "Broadband Internet", agency: "Amazon / Kuiper Systems" },
+  67785: { desc: "Amazon Kuiper LEO broadband satellite providing high-speed internet connectivity as part of Amazon's global commercial broadband constellation.", type: "Broadband Internet", agency: "Amazon / Kuiper Systems" },
+  67784: { desc: "Amazon Kuiper LEO broadband satellite providing high-speed internet connectivity as part of Amazon's global commercial broadband constellation.", type: "Broadband Internet", agency: "Amazon / Kuiper Systems" },
+  67774: { desc: "Amazon Kuiper LEO broadband satellite providing high-speed internet connectivity as part of Amazon's global commercial broadband constellation.", type: "Broadband Internet", agency: "Amazon / Kuiper Systems" },
+  // ── United Kingdom ────────────────────────────────────────────
+  68498: { desc: "Small commercial spacecraft by AAC Space Operations testing communication, Earth observation, and advanced satellite systems technologies for future constellation missions.", type: "Tech Demo / Earth Obs", agency: "AAC Space Operations" },
+  68465: { desc: "Second-generation thermal infrared satellite monitoring heat emissions from industrial facilities, oil and gas sites, power plants, and environmental sources for commercial analytics.", type: "Thermal Infrared / Earth Obs", agency: "Satellite Vu" },
+  68434: { desc: "Commercial Earth observation satellite providing multispectral optical imaging for environmental monitoring, urban planning, agriculture, and disaster response applications.", type: "Optical EO", agency: "Open Cosmos" },
+  68421: { desc: "Commercial Earth observation satellite working alongside VIREON-1 to provide increased revisit rates for multispectral optical imaging and geospatial intelligence services.", type: "Optical EO", agency: "Open Cosmos" },
+  67397: { desc: "Synthetic aperture radar satellite measuring forest carbon stocks and biomass to support climate change monitoring, carbon credit verification, and environmental compliance.", type: "SAR / Carbon Monitoring", agency: "Lumi Space" },
+  66745: { desc: "Arlula Earth observation constellation satellite providing optical imagery and analytics for commercial, environmental, and government customers worldwide.", type: "Optical EO", agency: "Arlula" },
+  66744: { desc: "Arlula Earth observation constellation satellite providing optical imagery and data analytics for commercial, environmental, and government customers worldwide.", type: "Optical EO", agency: "Arlula" },
+  64546: { desc: "Manufacturing demonstration satellite testing in-space manufacturing techniques including metal alloy processing and semiconductor production using microgravity and vacuum environments.", type: "In-Space Manufacturing", agency: "Space Forge" },
+  62677: { desc: "Commercial Earth observation satellite providing high-resolution optical imagery and geospatial data analytics for environmental monitoring and commercial applications.", type: "Optical EO", agency: "EarthDaily Analytics" },
+  62457: { desc: "High-resolution geostationary optical imaging satellite delivering persistent wide-area Earth surveillance for commercial monitoring, security, and government intelligence applications.", type: "Optical EO (GEO)", agency: "NuView" },
+  62455: { desc: "High-resolution geostationary optical imaging satellite working alongside NUVIEW BRAVO for continuous wide-area Earth observation and commercial intelligence services.", type: "Optical EO (GEO)", agency: "NuView" },
+  60496: { desc: "Small satellite supporting technology demonstration and experimental missions for UK space industry development and future commercial applications.", type: "Tech Demo", agency: "UK Industry Consortium" },
+  60470: { desc: "AI-powered Earth observation satellite demonstrating onboard machine learning for real-time data processing, cloud detection, and intelligent satellite operations.", type: "AI / Earth Obs", agency: "ESA / Open Cosmos (UK)" },
+  56954: { desc: "First-generation thermal infrared satellite monitoring heat emissions from industrial sites, oil and gas facilities, and environmental sources to support commercial analytics.", type: "Thermal Infrared / Earth Obs", agency: "Satellite Vu" },
+  56725: { desc: "OneWeb LEO broadband internet satellite providing global high-speed connectivity services as part of the OneWeb commercial communications constellation.", type: "Broadband Internet", agency: "OneWeb / Eutelsat" },
+  56724: { desc: "OneWeb LEO broadband internet satellite providing global high-speed connectivity services as part of the OneWeb commercial communications constellation.", type: "Broadband Internet", agency: "OneWeb / Eutelsat" },
+  56723: { desc: "OneWeb LEO broadband internet satellite providing global high-speed connectivity services as part of the OneWeb commercial communications constellation.", type: "Broadband Internet", agency: "OneWeb / Eutelsat" },
+  56722: { desc: "OneWeb LEO broadband internet satellite providing global high-speed connectivity services as part of the OneWeb commercial communications constellation.", type: "Broadband Internet", agency: "OneWeb / Eutelsat" },
+  56721: { desc: "OneWeb LEO broadband internet satellite providing global high-speed connectivity services as part of the OneWeb commercial communications constellation.", type: "Broadband Internet", agency: "OneWeb / Eutelsat" },
+  37951: { desc: "UK military geostationary communications satellite providing secure voice, data, and broadband services for British armed forces and allied operations worldwide.", type: "Military Comms (GEO)", agency: "UK MoD / Airbus DS" },
+  // ── Canada ────────────────────────────────────────────────────
+  67383: { desc: "Space situational awareness satellite in NorthStar's constellation tracking orbital debris, monitoring the space environment, and providing collision avoidance data services.", type: "Space Situational Awareness", agency: "NorthStar Earth & Space" },
+  67382: { desc: "Space situational awareness satellite tracking orbital objects and providing space traffic management data to protect satellites from debris collisions.", type: "Space Situational Awareness", agency: "NorthStar Earth & Space" },
+  67381: { desc: "Space situational awareness satellite monitoring the orbital environment and tracking space debris to support safe satellite operations and collision avoidance.", type: "Space Situational Awareness", agency: "NorthStar Earth & Space" },
+  67380: { desc: "Space situational awareness satellite providing orbital debris tracking and space traffic monitoring services as part of NorthStar's commercial SSA constellation.", type: "Space Situational Awareness", agency: "NorthStar Earth & Space" },
+  67379: { desc: "Space situational awareness satellite contributing to NorthStar's constellation for tracking objects in orbit and providing real-time space domain awareness data.", type: "Space Situational Awareness", agency: "NorthStar Earth & Space" },
+  67378: { desc: "Space situational awareness satellite supporting orbital object tracking and commercial space traffic management as part of NorthStar's LEO surveillance network.", type: "Space Situational Awareness", agency: "NorthStar Earth & Space" },
+  67377: { desc: "Space situational awareness satellite monitoring orbital debris and spacecraft positions to support collision avoidance services for commercial and government operators.", type: "Space Situational Awareness", agency: "NorthStar Earth & Space" },
+  67376: { desc: "Space situational awareness satellite providing debris tracking and space environment monitoring services within NorthStar's commercial orbital surveillance network.", type: "Space Situational Awareness", agency: "NorthStar Earth & Space" },
+  67375: { desc: "Space situational awareness satellite tracking orbital objects and providing space traffic awareness data to operators across LEO, MEO, and GEO regimes.", type: "Space Situational Awareness", agency: "NorthStar Earth & Space" },
+  67374: { desc: "Space situational awareness satellite providing orbital surveillance and debris tracking as part of NorthStar's commercial space domain awareness constellation.", type: "Space Situational Awareness", agency: "NorthStar Earth & Space" },
+  62669: { desc: "Automatic Identification System satellite tracking maritime vessels globally, monitoring ship movements, enabling fleet management, and supporting maritime safety and security.", type: "AIS / Maritime Tracking", agency: "exactEarth / Spire" },
+  62668: { desc: "Automatic Identification System satellite providing global maritime vessel tracking data for fleet management, search and rescue, and ocean traffic monitoring.", type: "AIS / Maritime Tracking", agency: "exactEarth / Spire" },
+  56209: { desc: "Greenhouse gas monitoring satellite measuring methane and CO2 emissions from industrial facilities, pipelines, and agriculture to support environmental compliance and climate policy.", type: "GHG Monitoring", agency: "GHGSat" },
+  56204: { desc: "Greenhouse gas monitoring satellite detecting methane leaks and industrial emissions from space to support environmental compliance and global climate change research.", type: "GHG Monitoring", agency: "GHGSat" },
+  44324: { desc: "Part of RADARSAT Constellation Mission providing C-band SAR imaging for maritime surveillance, disaster management, ecosystem monitoring, and Arctic ice tracking.", type: "SAR / Earth Obs (C-band)", agency: "CSA" },
+  44323: { desc: "Part of RADARSAT Constellation Mission delivering all-weather SAR Earth observation for disaster response, resource management, and environmental monitoring across Canada and globally.", type: "SAR / Earth Obs (C-band)", agency: "CSA" },
+  44322: { desc: "Lead satellite of RADARSAT Constellation Mission providing C-band SAR imaging for Arctic monitoring, maritime surveillance, disaster management, and Canadian sovereignty applications.", type: "SAR / Earth Obs (C-band)", agency: "CSA" },
+  43611: { desc: "High-throughput geostationary communications satellite providing broadcasting and internet services across the Asia-Pacific region for Telesat customers.", type: "HTS Comms (GEO)", agency: "Telesat" },
+  43562: { desc: "High-throughput geostationary communications satellite delivering broadband and broadcasting services across the Americas and Atlantic Ocean regions for Telesat customers.", type: "HTS Comms (GEO)", agency: "Telesat" },
+  41036: { desc: "Geostationary communications satellite providing broadcasting, broadband, and data transmission services across Europe, the Americas, and Atlantic Ocean regions.", type: "Communications (GEO)", agency: "Telesat" },
+  // ── Germany ───────────────────────────────────────────────────
+  67391: { desc: "Commercial technology demonstration satellite testing novel antenna structures, lightweight deployable systems, and advanced communication technologies for future German commercial space missions.", type: "Tech Demo", agency: "German Aerospace Consortium" },
+  67162: { desc: "Galileo navigation satellite built by German industry providing global positioning, navigation, and timing services as part of Europe's independent GNSS constellation.", type: "Navigation (GNSS)", agency: "OHB SE / ESA / EC" },
+  67160: { desc: "Galileo navigation satellite contributing to Europe's global navigation satellite system, providing precise positioning and timing signals built by German industry.", type: "Navigation (GNSS)", agency: "OHB SE / ESA / EC" },
+  66774: { desc: "German experimental navigation and orbital technology satellite testing advanced positioning, timing, and orbital transfer systems for future German space infrastructure.", type: "Navigation Tech Demo", agency: "OHB SE / DLR" },
+  64544: { desc: "Part of a dual-satellite commercial constellation designed for direct-to-device mobile communications, IoT connectivity, and narrowband services from low Earth orbit.", type: "Direct-to-Device / IoT", agency: "Skybee / German Startup" },
+  62671: { desc: "First SkYBee satellite testing direct-to-device mobile communications and low-power IoT connectivity services from LEO for commercial and industrial applications.", type: "Direct-to-Device / IoT", agency: "Skybee / German Startup" },
+  62616: { desc: "University CubeSat developed by TU Berlin for educational experiments, space technology testing, and scientific research supporting Germany's academic space program.", type: "University CubeSat", agency: "TU Berlin" },
+  60528: { desc: "CubeSat demonstrating novel electromagnetic sensing and ionospheric research technologies, contributing to space weather monitoring and German academic space research.", type: "Ionospheric Research", agency: "German University Consortium" },
+  60476: { desc: "Small satellite supporting technology demonstration and experimental quantum communication or photonics experiments for German research institutions.", type: "Tech Demo / Quantum Comms", agency: "German Research Institute" },
+  60240: { desc: "Experimental CubeSat testing orbital debris observation and monitoring capabilities using miniaturized optical sensors to improve space situational awareness.", type: "Debris Observation", agency: "German University / DLR" },
+  59112: { desc: "Autonomous satellite demonstrating AI-based onboard decision-making, intelligent sensor fusion, and machine-learning algorithms for improved Earth observation operations.", type: "AI / Autonomous Ops", agency: "University of Würzburg" },
+  58810: { desc: "Nanosatellite testing formation flying algorithms, miniaturized propulsion systems, and inter-satellite networking technologies for future German constellation missions.", type: "Formation Flying Tech Demo", agency: "Zentrum für Telematik (ZfT)" },
+  58755: { desc: "Nanosatellite conducting formation flying experiments and testing miniaturized space systems, coordinating with NANOFF A to demonstrate distributed orbital operations.", type: "Formation Flying Tech Demo", agency: "Zentrum für Telematik (ZfT)" },
+  57213: { desc: "Geostationary communications satellite supporting high-throughput broadband connectivity and data services for European and international commercial customers.", type: "HTS Comms (GEO)", agency: "HellasSat / H2SAT Consortium" },
+  52159: { desc: "Hyperspectral Earth imaging satellite providing detailed land surface analysis for agriculture, geology, ecosystem health, environmental monitoring, and urban mapping.", type: "Hyperspectral EO", agency: "DLR / German Aerospace Center" },
+  47346: { desc: "Commercial technology demonstration satellite testing miniaturized propulsion, attitude control, and communication systems developed by German industry for future commercial missions.", type: "Tech Demo", agency: "German Orbit / DLR" },
+  46507: { desc: "Formation-flying nanosatellite demonstrating distributed space systems, autonomous multi-satellite coordination, and networking technologies for future German satellite constellations.", type: "Formation Flying Tech Demo", agency: "University of Würzburg" },
+  46506: { desc: "Formation-flying nanosatellite testing multi-satellite coordination, distributed computing, and inter-satellite communication protocols in low Earth orbit.", type: "Formation Flying Tech Demo", agency: "University of Würzburg" },
+  46505: { desc: "Formation-flying nanosatellite part of the NetSat mission demonstrating autonomous inter-satellite networking and collaborative orbital operations.", type: "Formation Flying Tech Demo", agency: "University of Würzburg" },
+  46495: { desc: "Amateur radio and communications experimental satellite developed by TU Berlin supporting ham radio operators and testing miniaturized communication systems in LEO.", type: "Amateur Radio / Experimental", agency: "TU Berlin" },
+  // ── USA (Starlink LEO broadband constellation) ─────────────────
+  62162: { desc: "SpaceX Starlink LEO satellite providing global high-speed broadband internet connectivity as part of the world's largest commercial satellite internet constellation.", type: "Broadband Internet", agency: "SpaceX" },
+  62161: { desc: "SpaceX Starlink LEO satellite providing global high-speed broadband internet connectivity as part of the world's largest commercial satellite internet constellation.", type: "Broadband Internet", agency: "SpaceX" },
+  62160: { desc: "SpaceX Starlink LEO satellite providing global high-speed broadband internet connectivity as part of the world's largest commercial satellite internet constellation.", type: "Broadband Internet", agency: "SpaceX" },
+  62159: { desc: "SpaceX Starlink LEO satellite providing global high-speed broadband internet connectivity as part of the world's largest commercial satellite internet constellation.", type: "Broadband Internet", agency: "SpaceX" },
+  62158: { desc: "SpaceX Starlink LEO satellite providing global high-speed broadband internet connectivity as part of the world's largest commercial satellite internet constellation.", type: "Broadband Internet", agency: "SpaceX" },
+  62157: { desc: "SpaceX Starlink LEO satellite providing global high-speed broadband internet connectivity as part of the world's largest commercial satellite internet constellation.", type: "Broadband Internet", agency: "SpaceX" },
+  62156: { desc: "SpaceX Starlink LEO satellite providing global high-speed broadband internet connectivity as part of the world's largest commercial satellite internet constellation.", type: "Broadband Internet", agency: "SpaceX" },
+  62155: { desc: "SpaceX Starlink LEO satellite providing global high-speed broadband internet connectivity as part of the world's largest commercial satellite internet constellation.", type: "Broadband Internet", agency: "SpaceX" },
+  62154: { desc: "SpaceX Starlink LEO satellite providing global high-speed broadband internet connectivity as part of the world's largest commercial satellite internet constellation.", type: "Broadband Internet", agency: "SpaceX" },
+  62153: { desc: "SpaceX Starlink LEO satellite providing global high-speed broadband internet connectivity as part of the world's largest commercial satellite internet constellation.", type: "Broadband Internet", agency: "SpaceX" },
+  62152: { desc: "SpaceX Starlink LEO satellite providing global high-speed broadband internet connectivity as part of the world's largest commercial satellite internet constellation.", type: "Broadband Internet", agency: "SpaceX" },
+  62151: { desc: "SpaceX Starlink LEO satellite providing global high-speed broadband internet connectivity as part of the world's largest commercial satellite internet constellation.", type: "Broadband Internet", agency: "SpaceX" },
+  62150: { desc: "SpaceX Starlink LEO satellite providing global high-speed broadband internet connectivity as part of the world's largest commercial satellite internet constellation.", type: "Broadband Internet", agency: "SpaceX" },
+  62149: { desc: "SpaceX Starlink LEO satellite providing global high-speed broadband internet connectivity as part of the world's largest commercial satellite internet constellation.", type: "Broadband Internet", agency: "SpaceX" },
+  62148: { desc: "SpaceX Starlink LEO satellite providing global high-speed broadband internet connectivity as part of the world's largest commercial satellite internet constellation.", type: "Broadband Internet", agency: "SpaceX" },
+  62147: { desc: "SpaceX Starlink LEO satellite providing global high-speed broadband internet connectivity as part of the world's largest commercial satellite internet constellation.", type: "Broadband Internet", agency: "SpaceX" },
+  62146: { desc: "SpaceX Starlink LEO satellite providing global high-speed broadband internet connectivity as part of the world's largest commercial satellite internet constellation.", type: "Broadband Internet", agency: "SpaceX" },
+  62145: { desc: "SpaceX Starlink LEO satellite providing global high-speed broadband internet connectivity as part of the world's largest commercial satellite internet constellation.", type: "Broadband Internet", agency: "SpaceX" },
+  62144: { desc: "SpaceX Starlink LEO satellite providing global high-speed broadband internet connectivity as part of the world's largest commercial satellite internet constellation.", type: "Broadband Internet", agency: "SpaceX" },
+  62143: { desc: "SpaceX Starlink LEO satellite providing global high-speed broadband internet connectivity as part of the world's largest commercial satellite internet constellation.", type: "Broadband Internet", agency: "SpaceX" },
+  62142: { desc: "SpaceX Starlink LEO satellite providing global high-speed broadband internet connectivity as part of the world's largest commercial satellite internet constellation.", type: "Broadband Internet", agency: "SpaceX" },
+  62141: { desc: "SpaceX Starlink LEO satellite providing global high-speed broadband internet connectivity as part of the world's largest commercial satellite internet constellation.", type: "Broadband Internet", agency: "SpaceX" },
+  62140: { desc: "SpaceX Starlink LEO satellite providing global high-speed broadband internet connectivity as part of the world's largest commercial satellite internet constellation.", type: "Broadband Internet", agency: "SpaceX" },
+  62139: { desc: "SpaceX Starlink LEO satellite providing global high-speed broadband internet connectivity as part of the world's largest commercial satellite internet constellation.", type: "Broadband Internet", agency: "SpaceX" },
+  62137: { desc: "SpaceX Starlink LEO satellite providing global high-speed broadband internet connectivity as part of the world's largest commercial satellite internet constellation.", type: "Broadband Internet", agency: "SpaceX" },
+  62136: { desc: "SpaceX Starlink LEO satellite providing global high-speed broadband internet connectivity as part of the world's largest commercial satellite internet constellation.", type: "Broadband Internet", agency: "SpaceX" },
+  62135: { desc: "SpaceX Starlink LEO satellite providing global high-speed broadband internet connectivity as part of the world's largest commercial satellite internet constellation.", type: "Broadband Internet", agency: "SpaceX" },
+  62134: { desc: "SpaceX Starlink LEO satellite providing global high-speed broadband internet connectivity as part of the world's largest commercial satellite internet constellation.", type: "Broadband Internet", agency: "SpaceX" },
+  62133: { desc: "SpaceX Starlink LEO satellite providing global high-speed broadband internet connectivity as part of the world's largest commercial satellite internet constellation.", type: "Broadband Internet", agency: "SpaceX" },
+  62132: { desc: "SpaceX Starlink LEO satellite providing global high-speed broadband internet connectivity as part of the world's largest commercial satellite internet constellation.", type: "Broadband Internet", agency: "SpaceX" },
+};
+
+// Color per zone
+const ZONE_COLOR = { LEO: '#00ff88', MEO: '#ffd700', GEO: '#ff4466', DEEP: '#aa88ff' };
+const ZONE_LABEL = { LEO: '🟢 LEO', MEO: '🟡 MEO', GEO: '🔴 GEO', DEEP: '⚫ Deep Space' };
+const ZONE_ALT   = { LEO: '160–2,000 km', MEO: '2,000–35,786 km', GEO: '~35,786 km', DEEP: '>35,786 km' };
+
+// Live data store: norad -> position data
+const liveData = {};
+
+// TLE store: norad -> satrec (satellite.js record)
+const tleStore = {};
+
+// Map markers
+const mapMarkers = {};
+const orbitTrails = {};
+
+let map = null;
+let currentView = 'kanban';
+let refreshTimer = null;
+
+// ============================================================
+// N2YO API
+// ============================================================
+async function fetchTLE(norad) {
+  try {
+    const url = `${N2YO_PROXY}?path=tle/${norad}`;
+    const r = await fetch(url);
+    const d = await r.json();
+    if (d.tle) {
+      const lines = d.tle.trim().split('\n');
+      if (lines.length >= 2) {
+        const satrec = satellite.twoline2satrec(lines[lines.length-2].trim(), lines[lines.length-1].trim());
+        tleStore[norad] = satrec;
+        return satrec;
+      }
+    }
+  } catch(e) { console.warn('TLE fetch failed for', norad, e); }
+  return null;
+}
+
+// Calculate position from TLE (client-side, no API call)
+function calcPositionFromTLE(norad) {
+  const satrec = tleStore[norad];
+  if (!satrec) return null;
+  try {
+    const now = new Date();
+    const pv = satellite.propagate(satrec, now);
+    if (!pv.position) return null;
+    const gmst = satellite.gstime(now);
+    const geo = satellite.eciToGeodetic(pv.position, gmst);
+    const latDeg = satellite.degreesLat(geo.latitude);
+    const lngDeg = satellite.degreesLong(geo.longitude);
+    const altKm  = geo.height;
+    // velocity magnitude in km/s
+    const v = pv.velocity;
+    const velKms = v ? Math.sqrt(v.x*v.x + v.y*v.y + v.z*v.z) : 0;
+    return { lat: latDeg, lng: lngDeg, alt: altKm, vel: velKms };
+  } catch(e) { return null; }
+}
+
+// ISS live via wheretheiss.at (more reliable for ISS, no key)
+async function fetchISS() {
+  try {
+    const r = await fetch('https://api.wheretheiss.at/v1/satellites/25544');
+    const d = await r.json();
+    return { lat: d.latitude, lng: d.longitude, alt: d.altitude, vel: d.velocity/3600 };
+  } catch(e) { return null; }
+}
+
+// N2YO visual passes for a satellite over observer
+async function fetchPasses(norad) {
+  try {
+    const {lat, lng, alt} = observer;
+    const url = `${N2YO_PROXY}?path=visualpasses/${norad}/${lat}/${lng}/${alt}/5/30`;
+    const r = await fetch(url);
+    const d = await r.json();
+    return d.passes || [];
+  } catch(e) { return []; }
+}
+
+// ============================================================
+// POSITION UPDATER
+// ============================================================
+async function updateAllPositions() {
+  const now = new Date();
+  let updated = 0;
+
+  for (const sat of SATELLITES) {
+    let pos = null;
+
+    // ISS: prefer wheretheiss.at
+    if (sat.norad === 25544) {
+      pos = await fetchISS();
+    }
+
+    // Try TLE client-side math
+    if (!pos && tleStore[sat.norad]) {
+      pos = calcPositionFromTLE(sat.norad);
+    }
+
+    if (pos) {
+      liveData[sat.norad] = { ...pos, ts: now };
+      updated++;
+    }
+  }
+
+  document.getElementById('last-update').textContent =
+    `Updated ${updated}/${SATELLITES.length} @ ${now.toLocaleTimeString()}`;
+  renderKanban();
+  if (currentView === 'map') updateMapMarkers();
+}
+
+// ============================================================
+// KANBAN RENDER
+// ============================================================
+function renderKanban() {
+  const cols = { LEO: [], MEO: [], GEO: [], DEEP: [] };
+  for (const sat of SATELLITES) {
+    cols[sat.zone]?.push(sat);
+  }
+
+  const zoneMap = { LEO: 'col-leo', MEO: 'col-meo', GEO: 'col-geo', DEEP: 'col-deep' };
+  const countMap = { LEO: 'leo-count', MEO: 'meo-count', GEO: 'geo-count', DEEP: 'deep-count' };
+
+  for (const [zone, sats] of Object.entries(cols)) {
+    const el = document.getElementById(zoneMap[zone]);
+    document.getElementById(countMap[zone]).textContent = `(${sats.length})`;
+
+    // Preserve open state
+    const openCards = new Set([...el.querySelectorAll('.sat-card.open')].map(e => e.dataset.norad));
+
+    el.innerHTML = sats.map(sat => {
+      const d = liveData[sat.norad];
+      const isOpen = openCards.has(String(sat.norad));
+      return buildCard(sat, d, isOpen);
+    }).join('') || '<div class="no-data">No satellites</div>';
+  }
+}
+
+function buildCard(sat, d, isOpen) {
+  const noLive = !d;
+  const lat  = d ? d.lat.toFixed(2)  + '°' : '—';
+  const lng  = d ? d.lng.toFixed(2)  + '°' : '—';
+  const alt  = d ? d.alt.toFixed(0)  + ' km' : '—';
+  const vel  = d ? d.vel.toFixed(2)  + ' km/s' : '—';
+
+  return `
+  <div class="sat-card${isOpen?' open':''}" data-norad="${sat.norad}" onclick="toggleCard(this)">
+    <div class="card-badge">${sat.icon}</div>
+    <div class="card-title">${sat.name}</div>
+    <div class="card-row"><span>Lat</span><span class="card-val">${lat}</span></div>
+    <div class="card-row"><span>Lon</span><span class="card-val">${lng}</span></div>
+    <div class="card-row"><span>Alt</span><span class="card-val">${alt}</span></div>
+    <div class="card-row"><span>Vel</span><span class="card-val">${vel}</span></div>
+    <div class="card-expand">
+      <div class="row"><span class="label">NORAD ID</span><span>${sat.norad}</span></div>
+      <div class="row"><span class="label">Agency</span><span>${sat.flag}</span></div>
+      <div class="row"><span class="label">Zone</span><span>${ZONE_LABEL[sat.zone]}</span></div>
+      <div class="row"><span class="label">Orbit range</span><span>${ZONE_ALT[sat.zone]}</span></div>
+      <div class="pass-info" id="passes-${sat.norad}">
+        <div class="ptitle">📡 Next passes over observer</div>
+        <span style="color:var(--muted)">Click to load passes...</span>
+      </div>
+      <div style="margin-top:8px">
+        <a href="https://www.n2yo.com/?s=${sat.norad}" target="_blank"
+           style="color:var(--accent);font-size:0.68rem;text-decoration:none;">
+          🔗 View on N2YO →
+        </a>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function toggleCard(el) {
+  el.classList.toggle('open');
+  if (el.classList.contains('open')) {
+    const norad = parseInt(el.dataset.norad);
+    loadPasses(norad, el);
+    // Flash update
+    el.classList.add('updated');
+    setTimeout(()=>el.classList.remove('updated'), 700);
+  }
+}
+
+async function loadPasses(norad, cardEl) {
+  const passEl = cardEl.querySelector(`#passes-${norad}`);
+  if (!passEl) return;
+  passEl.innerHTML = '<div class="ptitle">📡 Next passes over observer</div><span style="color:var(--muted)">Fetching...</span>';
+  const passes = await fetchPasses(norad);
+  if (!passes.length) {
+    passEl.innerHTML = '<div class="ptitle">📡 Next passes</div><span style="color:var(--muted)">No visible passes in next 5 days</span>';
+    return;
+  }
+  const rows = passes.slice(0,3).map(p => {
+    const d = new Date(p.startUTC * 1000);
+    const dur = Math.round(p.duration/60) + ' min';
+    const el_max = p.maxEl ? p.maxEl.toFixed(0)+'°' : '—';
+    return `<div style="margin:3px 0;border-top:1px solid var(--border);padding-top:3px">
+      📅 ${d.toLocaleString()} | ⬆️ Max ${el_max} | ⏱ ${dur}
+    </div>`;
+  }).join('');
+  passEl.innerHTML = `<div class="ptitle">📡 Next passes over observer</div>${rows}`;
+}
+
+// ============================================================
+// MAP
+// ============================================================
+// ── Day/Night Terminator Layer ────────────────────────────────
+// Draws the night-side shadow polygon on any Leaflet map.
+// Uses standard solar declination + hour-angle math (no external deps).
+function solarPosition(date) {
+  const D = date / 86400000 - 10957.5; // days since J2000.0 approx
+  const g = (357.529 + 0.98560028 * D) * Math.PI / 180; // mean anomaly
+  const q = 280.459 + 0.98564736 * D;                   // mean longitude
+  const L = (q + 1.915 * Math.sin(g) + 0.020 * Math.sin(2*g)) * Math.PI / 180;
+  const e = (23.439 - 0.0000004 * D) * Math.PI / 180;   // obliquity
+  const sinDec = Math.sin(e) * Math.sin(L);
+  const dec    = Math.asin(sinDec);                      // declination
+  // Sun's right ascension (hours)
+  const RA     = Math.atan2(Math.cos(e)*Math.sin(L), Math.cos(L));
+  // Greenwich Hour Angle of the Sun
+  const GMST   = (280.46061837 + 360.98564736629 * D) * Math.PI / 180;
+  const sha    = GMST - RA; // solar hour angle at Greenwich
+  const sunLng = -((sha * 180/Math.PI) % 360 + 360) % 360;
+  const sunLat =  dec * 180/Math.PI;
+  return { lat: sunLat, lng: sunLng };
+}
+
+function getTerminatorPoints(date) {
+  const { lat: sunLat, lng: sunLng } = solarPosition(date.getTime());
+  const sunLatR = sunLat * Math.PI / 180;
+  const sunLngR = sunLng * Math.PI / 180;
+  const pts = [];
+  for (let az = 0; az <= 360; az++) {
+    const azR   = az * Math.PI / 180;
+    // Great-circle point 90° from sun along each azimuth
+    const tLat = Math.asin(Math.sin(sunLatR)*Math.cos(Math.PI/2) +
+                           Math.cos(sunLatR)*Math.sin(Math.PI/2)*Math.cos(azR));
+    const dLng = Math.atan2(Math.sin(azR)*Math.sin(Math.PI/2)*Math.cos(sunLatR),
+                            Math.cos(Math.PI/2)-Math.sin(sunLatR)*Math.sin(tLat));
+    const tLng = sunLngR + dLng;
+    pts.push([tLat * 180/Math.PI, ((tLng * 180/Math.PI) + 540) % 360 - 180]);
+  }
+  return pts;
+}
+
+function buildNightPolygon(terminatorPts, sunLat) {
+  // Close night-side polygon: wrap terminator + cap at the pole opposite the sun
+  const pole = sunLat >= 0 ? -90 : 90;
+  const sorted = [...terminatorPts].sort((a,b) => a[1]-b[1]);
+  const poly = [
+    [pole, -180], ...sorted.map(p => [p[0], p[1]]), [pole, 180]
+  ];
+  return poly;
+}
+
+function addTerminatorLayer(leafletMap) {
+  const now = new Date();
+  const pts  = getTerminatorPoints(now);
+  const { lat: sLat } = solarPosition(now.getTime());
+  const nightPoly = buildNightPolygon(pts, sLat);
+
+  const termLine = L.polyline(
+    pts.sort((a,b)=>a[1]-b[1]),
+    { color: 'rgba(120,180,255,0.55)', weight: 1.5, dashArray: '6,4' }
+  ).addTo(leafletMap);
+
+  const nightLayer = L.polygon(nightPoly, {
+    color: 'none', fillColor: '#000820',
+    fillOpacity: 0.42, interactive: false
+  }).addTo(leafletMap);
+
+  // Refresh every 5 minutes
+  setInterval(() => {
+    const t   = new Date();
+    const np  = getTerminatorPoints(t);
+    const { lat: sl } = solarPosition(t.getTime());
+    const poly = buildNightPolygon(np, sl);
+    nightLayer.setLatLngs(poly);
+    termLine.setLatLngs(np.sort((a,b)=>a[1]-b[1]));
+  }, 5 * 60 * 1000);
+
+  return { termLine, nightLayer };
+}
+
+function initMap() {
+  if (map) return;
+  map = L.map('map', { zoomControl: true, worldCopyJump: true }).setView([20, 0], 2);
+
+  // Dark tile layer
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '© OpenStreetMap © CartoDB',
+    subdomains: 'abcd', maxZoom: 19
+  }).addTo(map);
+
+  // Day/night terminator overlay
+  addTerminatorLayer(map);
+
+  // Observer marker
+  L.circleMarker([observer.lat, observer.lng], {
+    radius: 6, color: '#0af', fillColor: '#0af', fillOpacity: 0.8, weight: 2
+  }).addTo(map).bindPopup('<b>📍 Observer Location</b>');
+
+  updateMapMarkers();
+}
+
+function updateMapMarkers() {
+  if (!map) return;
+
+  for (const sat of SATELLITES) {
+    const d = liveData[sat.norad];
+    if (!d) continue;
+
+    const color = ZONE_COLOR[sat.zone] || '#aaa';
+    const popup = `<b>${sat.icon} ${sat.name}</b><br>
+      Lat: ${d.lat.toFixed(2)}°<br>
+      Lon: ${d.lng.toFixed(2)}°<br>
+      Alt: ${d.alt.toFixed(0)} km<br>
+      Vel: ${d.vel.toFixed(2)} km/s<br>
+      <a href="https://www.n2yo.com/?s=${sat.norad}" target="_blank" style="color:#0af">View on N2YO →</a>`;
+
+    if (mapMarkers[sat.norad]) {
+      mapMarkers[sat.norad].setLatLng([d.lat, d.lng]);
+      mapMarkers[sat.norad].setPopupContent(popup);
+      // Update trail
+      const trail = orbitTrails[sat.norad];
+      if (trail) {
+        const pts = trail.getLatLngs();
+        pts.push([d.lat, d.lng]);
+        if (pts.length > 15) pts.shift();
+        trail.setLatLngs(pts);
+      }
+    } else {
+      // Create marker with PNG icon
+      const iconPath = ckIconFor(SAT_INFO[sat.norad] ? SAT_INFO[sat.norad].type : null, sat.norad);
+      const icon = L.icon({
+        iconUrl: iconPath,
+        iconSize: [26, 26], iconAnchor: [13, 13],
+        className: 'sat-map-icon'
+      });
+      const marker = L.marker([d.lat, d.lng], {icon})
+        .addTo(map)
+        .bindPopup(popup);
+
+      marker.on('click', () => showMapPanel(sat, d));
+      mapMarkers[sat.norad] = marker;
+
+      // Trail polyline
+      orbitTrails[sat.norad] = L.polyline([[d.lat, d.lng]], {
+        color: color, weight: 1, opacity: 0.4, dashArray: '4,4'
+      }).addTo(map);
+    }
+  }
+}
+
+function showMapPanel(sat, d) {
+  document.getElementById('mi-name').textContent = `${sat.icon} ${sat.name}`;
+  document.getElementById('mi-lat').textContent   = d.lat.toFixed(4) + '°';
+  document.getElementById('mi-lng').textContent   = d.lng.toFixed(4) + '°';
+  document.getElementById('mi-alt').textContent   = d.alt.toFixed(1) + ' km';
+  document.getElementById('mi-vel').textContent   = d.vel.toFixed(3) + ' km/s';
+  document.getElementById('mi-zone').textContent  = ZONE_LABEL[sat.zone];
+  document.getElementById('mi-norad').textContent = sat.norad;
+  document.getElementById('map-info-panel').style.display = 'block';
+}
+
+// ============================================================
+// COUNTRIES VIEW
+// ============================================================
+// Pre-scraped satellite data per country (from n2yo.com, May 2026)
+const COUNTRY_SATS = {
+  USA: [
+    {name:"STARLINK-32529",norad:62139,intl:"2024-224A",launch:"November 30, 2024",period:94.3},
+    {name:"STARLINK-32464",norad:62140,intl:"2024-224B",launch:"November 30, 2024",period:94.3},
+    {name:"STARLINK-32482",norad:62141,intl:"2024-224C",launch:"November 30, 2024",period:94.3},
+    {name:"STARLINK-32454",norad:62142,intl:"2024-224D",launch:"November 30, 2024",period:94.3},
+    {name:"STARLINK-32485",norad:62143,intl:"2024-224E",launch:"November 30, 2024",period:94.3},
+    {name:"STARLINK-32388",norad:62144,intl:"2024-224F",launch:"November 30, 2024",period:94.3},
+    {name:"STARLINK-32374",norad:62145,intl:"2024-224G",launch:"November 30, 2024",period:94.3},
+    {name:"STARLINK-32384",norad:62146,intl:"2024-224H",launch:"November 30, 2024",period:94.3},
+    {name:"STARLINK-32295",norad:62147,intl:"2024-224J",launch:"November 30, 2024",period:94.3},
+    {name:"STARLINK-32479",norad:62148,intl:"2024-224K",launch:"November 30, 2024",period:94.3},
+    {name:"STARLINK-32468",norad:62149,intl:"2024-224L",launch:"November 30, 2024",period:94.3},
+    {name:"STARLINK-32629",norad:62150,intl:"2024-224M",launch:"November 30, 2024",period:94.3},
+    {name:"STARLINK-32644",norad:62151,intl:"2024-224N",launch:"November 30, 2024",period:94.3},
+    {name:"STARLINK-32623",norad:62152,intl:"2024-224P",launch:"November 30, 2024",period:94.3},
+    {name:"STARLINK-32639",norad:62153,intl:"2024-224Q",launch:"November 30, 2024",period:94.3},
+    {name:"STARLINK-32625",norad:62154,intl:"2024-224R",launch:"November 30, 2024",period:94.3},
+    {name:"STARLINK-32635",norad:62155,intl:"2024-224S",launch:"November 30, 2024",period:94.3},
+    {name:"STARLINK-32532",norad:62156,intl:"2024-224T",launch:"November 30, 2024",period:94.3},
+    {name:"STARLINK-32503",norad:62157,intl:"2024-224U",launch:"November 30, 2024",period:94.3},
+    {name:"STARLINK-32508",norad:62158,intl:"2024-224V",launch:"November 30, 2024",period:94.3},
+    {name:"STARLINK-32524",norad:62159,intl:"2024-224W",launch:"November 30, 2024",period:94.3},
+    {name:"STARLINK-32484",norad:62160,intl:"2024-224X",launch:"November 30, 2024",period:94.3},
+    {name:"STARLINK-32497",norad:62161,intl:"2024-224Y",launch:"November 30, 2024",period:94.3},
+    {name:"STARLINK-32526",norad:62162,intl:"2024-224Z",launch:"November 30, 2024",period:94.3},
+    {name:"STARLINK-32556",norad:62132,intl:"2024-222U",launch:"November 26, 2024",period:94.3},
+    {name:"STARLINK-32245",norad:62133,intl:"2024-222V",launch:"November 26, 2024",period:94.3},
+    {name:"STARLINK-32546",norad:62134,intl:"2024-222W",launch:"November 26, 2024",period:94.3},
+    {name:"STARLINK-32545",norad:62135,intl:"2024-222X",launch:"November 26, 2024",period:94.3},
+    {name:"STARLINK-32554",norad:62136,intl:"2024-222Y",launch:"November 26, 2024",period:94.3},
+    {name:"STARLINK-32570",norad:62137,intl:"2024-222Z",launch:"November 26, 2024",period:94.3}
+  ],
+  CIS: [
+    {name:"PROGRESS MS-34",norad:68837,intl:"2026-093A",launch:"April 25, 2026",period:93},
+    {name:"COSMOS 2618",norad:68829,intl:"2026-090D",launch:"April 23, 2026",period:91.1},
+    {name:"COSMOS 2617",norad:68828,intl:"2026-090C",launch:"April 23, 2026",period:91.1},
+    {name:"COSMOS 2616",norad:68827,intl:"2026-090B",launch:"April 23, 2026",period:91.1},
+    {name:"COSMOS 2615",norad:68826,intl:"2026-090A",launch:"April 23, 2026",period:91.1},
+    {name:"COSMOS 2614",norad:68764,intl:"2026-083K",launch:"April 16, 2026",period:95.5},
+    {name:"COSMOS 2613",norad:68763,intl:"2026-083J",launch:"April 16, 2026",period:95.5},
+    {name:"COSMOS 2612",norad:68762,intl:"2026-083H",launch:"April 16, 2026",period:95.6},
+    {name:"COSMOS 2611",norad:68759,intl:"2026-083G",launch:"April 16, 2026",period:95.6},
+    {name:"COSMOS 2610",norad:68758,intl:"2026-083F",launch:"April 16, 2026",period:95.6},
+    {name:"COSMOS 2609",norad:68754,intl:"2026-083B",launch:"April 16, 2026",period:95.5},
+    {name:"MERIDIAN 11",norad:68571,intl:"2026-071A",launch:"January 3, 2026",period:717.8},
+    {name:"RASSVET-3 16",norad:68375,intl:"2026-061R",launch:"March 23, 2026",period:91},
+    {name:"RASSVET-3 15",norad:68374,intl:"2026-061Q",launch:"March 23, 2026",period:90.8},
+    {name:"RASSVET-3 14",norad:68373,intl:"2026-061P",launch:"March 23, 2026",period:90.6},
+    {name:"RASSVET-3 13",norad:68372,intl:"2026-061N",launch:"March 23, 2026",period:91.6},
+    {name:"RASSVET-3 12",norad:68371,intl:"2026-061M",launch:"March 23, 2026",period:91.3},
+    {name:"RASSVET-3 1",norad:68360,intl:"2026-061A",launch:"March 23, 2026",period:90.7},
+    {name:"PROGRESS MS-33",norad:68319,intl:"2026-058A",launch:"March 22, 2026",period:93},
+    {name:"ELEKTRO-L 5",norad:67756,intl:"2026-028A",launch:"February 12, 2026",period:1436.1}
+  ],
+  PRC: [
+    {name:"PRSC-E03",norad:68835,intl:"2026-092A",launch:"April 25, 2026",period:95.6},
+    {name:"HJS-9D",norad:68834,intl:"2026-091D",launch:"April 24, 2026",period:94.8},
+    {name:"HJS-9C",norad:68833,intl:"2026-091C",launch:"April 24, 2026",period:94.8},
+    {name:"HJS-9B",norad:68832,intl:"2026-091B",launch:"April 24, 2026",period:94.8},
+    {name:"HJS-9A",norad:68831,intl:"2026-091A",launch:"April 24, 2026",period:94.8},
+    {name:"DAQI-2",norad:68760,intl:"2026-084A",launch:"April 17, 2026",period:98.8},
+    {name:"HJS-8A",norad:68687,intl:"2026-078A",launch:"April 11, 2026",period:105.5},
+    {name:"HULIANWANG DIGUI-168",norad:68660,intl:"2026-076E",launch:"April 8, 2026",period:106.2},
+    {name:"HULIANWANG DIGUI-167",norad:68659,intl:"2026-076D",launch:"April 8, 2026",period:106.2},
+    {name:"HULIANWANG DIGUI-166",norad:68658,intl:"2026-076C",launch:"April 8, 2026",period:106.2},
+    {name:"QIANFAN-127",norad:68654,intl:"2026-075U",launch:"April 7, 2026",period:100},
+    {name:"QIANFAN-126",norad:68653,intl:"2026-075T",launch:"April 7, 2026",period:102.3},
+    {name:"QIANFAN-125",norad:68652,intl:"2026-075S",launch:"April 7, 2026",period:102.7},
+    {name:"QIANFAN-124",norad:68651,intl:"2026-075R",launch:"April 7, 2026",period:102.7},
+    {name:"QIANFAN-123",norad:68650,intl:"2026-075Q",launch:"April 7, 2026",period:102.7},
+    {name:"QIANFAN-122",norad:68649,intl:"2026-075P",launch:"April 7, 2026",period:102.7},
+    {name:"QIANFAN-121",norad:68648,intl:"2026-075N",launch:"April 7, 2026",period:102.6},
+    {name:"QIANFAN-120",norad:68647,intl:"2026-075M",launch:"April 7, 2026",period:102.6},
+    {name:"QIANFAN-119",norad:68646,intl:"2026-075L",launch:"April 7, 2026",period:102.7},
+    {name:"QIANFAN-118",norad:68645,intl:"2026-075K",launch:"April 7, 2026",period:103.1},
+    {name:"QIANFAN-117",norad:68644,intl:"2026-075J",launch:"April 7, 2026",period:102.8},
+    {name:"QIANFAN-116",norad:68643,intl:"2026-075H",launch:"April 7, 2026",period:102.9},
+    {name:"QIANFAN-115",norad:68642,intl:"2026-075G",launch:"April 7, 2026",period:103.1},
+    {name:"QIANFAN-114",norad:68641,intl:"2026-075F",launch:"April 7, 2026",period:102.9},
+    {name:"QIANFAN-113",norad:68640,intl:"2026-075E",launch:"April 7, 2026",period:102.8},
+    {name:"QIANFAN-112",norad:68639,intl:"2026-075D",launch:"April 7, 2026",period:102.9},
+    {name:"QIANFAN-111",norad:68638,intl:"2026-075C",launch:"April 7, 2026",period:102.8},
+    {name:"QIANFAN-110",norad:68637,intl:"2026-075B",launch:"April 7, 2026",period:103.1},
+    {name:"CSS (Tianhe)",norad:48274,intl:"2021-035A",launch:"April 29, 2021",period:92.6},
+    {name:"FENGYUN 4B",norad:49807,intl:"2021-059A",launch:"June 2, 2021",period:1436.1}
+  ],
+  JPN: [
+    {name:"ORIGAMISAT-2",norad:68795,intl:"2026-088D",launch:"April 23, 2026",period:95.5},
+    {name:"STRIX-6",norad:68291,intl:"2026-056A",launch:"March 20, 2026",period:96},
+    {name:"TEN-KOH 2",norad:68261,intl:"2025-241B",launch:"October 26, 2025",period:94.5},
+    {name:"QPS-SAR-15 SUKUNAMI-1",norad:67228,intl:"2025-307A",launch:"December 21, 2025",period:96.1},
+    {name:"RAISE-4",norad:67073,intl:"2025-297B",launch:"December 14, 2025",period:95.4},
+    {name:"QPS-SAR-14 YACHIHOKO-1",norad:66316,intl:"2025-252A",launch:"November 5, 2025",period:96},
+    {name:"HTV-X1",norad:66174,intl:"2025-241A",launch:"October 26, 2025",period:92.1},
+    {name:"STRIX-5",norad:65971,intl:"2025-229A",launch:"October 14, 2025",period:95.7},
+    {name:"GOSAT-GW",norad:64694,intl:"2025-140A",launch:"June 28, 2025",period:98.1},
+    {name:"QPS-SAR-11 YAMATSUMI",norad:64340,intl:"2025-125A",launch:"June 11, 2025",period:95.9},
+    {name:"QPS-SAR-10 WADATSUMI-I",norad:64055,intl:"2025-104A",launch:"May 17, 2025",period:95.9},
+    {name:"QPS-SAR-9 SUSANOO-I",norad:63205,intl:"2025-050A",launch:"March 15, 2025",period:95.8},
+    {name:"QZS-6",norad:62876,intl:"2025-023A",launch:"February 2, 2025",period:1436.1},
+    {name:"STRIX 2",norad:62406,intl:"2024-248A",launch:"December 21, 2024",period:95.5},
+    {name:"DSN-3",norad:61733,intl:"2024-198A",launch:"November 4, 2024",period:1436.1},
+    {name:"IGS R-8",norad:61439,intl:"2024-176A",launch:"September 26, 2024",period:null},
+    {name:"QPS-SAR-8 AMATERU-IV",norad:60542,intl:"2024-149CC",launch:"August 16, 2024",period:95.8},
+    {name:"STRIX-4",norad:60352,intl:"2024-137A",launch:"August 2, 2024",period:94},
+    {name:"ALOS-4",norad:60182,intl:"2024-123A",launch:"July 1, 2024",period:97.3},
+    {name:"HAKUTO-R",norad:62717,intl:"2025-010B",launch:"January 15, 2025",period:null}
+  ],
+  ESA: [
+    {name:"LPNTSAT-002",norad:68409,intl:"2026-065B",launch:"March 28, 2026",period:94.8},
+    {name:"LPNTSAT-001",norad:68408,intl:"2026-065A",launch:"March 28, 2026",period:94.8},
+    {name:"KOMPSAT-7",norad:66820,intl:"2025-279A",launch:"December 1, 2025",period:95.9},
+    {name:"HYDROGNSS-2",norad:66763,intl:"2025-276DB",launch:"November 28, 2025",period:95.3},
+    {name:"HYDROGNSS-1",norad:66762,intl:"2025-276DA",launch:"November 28, 2025",period:95.3},
+    {name:"SENTINEL-1D",norad:66315,intl:"2025-251A",launch:"November 4, 2025",period:98.7},
+    {name:"METOP SG-A",norad:65159,intl:"2025-172A",launch:"August 13, 2025",period:101.3},
+    {name:"BIOMASS",norad:63772,intl:"2025-090A",launch:"April 29, 2025",period:98.1},
+    {name:"SENTINEL 1C",norad:62261,intl:"2024-235A",launch:"December 5, 2024",period:98.7},
+    {name:"PROBA-3 OSC",norad:62258,intl:"2024-233C",launch:"December 5, 2024",period:1179.6},
+    {name:"PROBA-3 CSC",norad:62256,intl:"2024-233A",launch:"December 5, 2024",period:1179.7},
+    {name:"GALILEO 31",norad:61183,intl:"2024-167B",launch:"September 17, 2024",period:844.7},
+    {name:"GALILEO 32",norad:61182,intl:"2024-167A",launch:"September 17, 2024",period:844.7},
+    {name:"SENTINEL-2C",norad:60989,intl:"2024-157A",launch:"September 5, 2024",period:100.6},
+    {name:"GALILEO 30",norad:59600,intl:"2024-079C",launch:"April 28, 2024",period:844.7},
+    {name:"GALILEO 29",norad:59598,intl:"2024-079A",launch:"April 28, 2024",period:844.7},
+    {name:"EUCLID",norad:57209,intl:"2023-092A",launch:"July 1, 2023",period:89.8},
+    {name:"JWST",norad:50463,intl:"2021-130A",launch:"December 25, 2021",period:73541.4},
+    {name:"SENTINEL-6 MICHAEL FREILICH",norad:46984,intl:"2020-086A",launch:"November 21, 2020",period:112.4},
+    {name:"CHEOPS",norad:44874,intl:"2019-092B",launch:"December 18, 2019",period:98.5},
+    {name:"EDRS-C",norad:44475,intl:"2019-049A",launch:"August 6, 2019",period:1436.1},
+    {name:"GALILEO 24",norad:43567,intl:"2018-060D",launch:"July 25, 2018",period:844.7},
+    {name:"SENTINEL 3B",norad:43437,intl:"2018-039A",launch:"April 25, 2018",period:100.9}
+  ],
+  FR: [
+    {name:"FLYLAB 2",norad:68503,intl:"2026-067CR",launch:"March 30, 2026",period:96.6},
+    {name:"FLYLAB 1",norad:68472,intl:"2026-067BJ",launch:"March 30, 2026",period:96.6},
+    {name:"SPACEVAN-002",norad:68424,intl:"2026-067J",launch:"March 30, 2026",period:94.9},
+    {name:"BRO-19",norad:68422,intl:"2026-067G",launch:"March 30, 2026",period:94.8},
+    {name:"KUIPER-00279",norad:67795,intl:"2026-030AH",launch:"February 12, 2026",period:93.8},
+    {name:"KUIPER-00276",norad:67794,intl:"2026-030AG",launch:"February 12, 2026",period:94.4},
+    {name:"KUIPER-00275",norad:67793,intl:"2026-030AF",launch:"February 12, 2026",period:93.7},
+    {name:"KUIPER-00274",norad:67792,intl:"2026-030AE",launch:"February 12, 2026",period:97.3},
+    {name:"KUIPER-00270",norad:67791,intl:"2026-030AD",launch:"February 12, 2026",period:93.7},
+    {name:"KUIPER-00268",norad:67790,intl:"2026-030AC",launch:"February 12, 2026",period:94.2},
+    {name:"KUIPER-00266",norad:67789,intl:"2026-030AB",launch:"February 12, 2026",period:94.4},
+    {name:"KUIPER-00262",norad:67788,intl:"2026-030AA",launch:"February 12, 2026",period:95.7},
+    {name:"KUIPER-00260",norad:67787,intl:"2026-030Z",launch:"February 12, 2026",period:95.6},
+    {name:"KUIPER-00259",norad:67786,intl:"2026-030Y",launch:"February 12, 2026",period:96.2},
+    {name:"KUIPER-00226",norad:67785,intl:"2026-030X",launch:"February 12, 2026",period:94.5},
+    {name:"KUIPER-00225",norad:67784,intl:"2026-030W",launch:"February 12, 2026",period:96.4},
+    {name:"KUIPER-00205",norad:67774,intl:"2026-030L",launch:"February 12, 2026",period:93.6},
+    {name:"SPOT-7",norad:40053,intl:"2014-034A",launch:"June 30, 2014",period:98.7},
+    {name:"PLEIADES 1B",norad:38755,intl:"2012-068A",launch:"December 2, 2012",period:98.8},
+    {name:"PLEIADES 1A",norad:37619,intl:"2011-076A",launch:"December 17, 2011",period:98.8}
+  ],
+  IND: [
+    {name:"CMS 03",norad:66311,intl:"2025-249B",launch:"November 2, 2025",period:1436.1},
+    {name:"NISAR",norad:65053,intl:"2025-163A",launch:"July 30, 2025",period:99.8},
+    {name:"NVS-02",norad:62850,intl:"2025-020A",launch:"January 29, 2025",period:660.8},
+    {name:"SDX02",norad:62460,intl:"2024-253B",launch:"December 30, 2024",period:92},
+    {name:"SDX01",norad:62459,intl:"2024-253A",launch:"December 30, 2024",period:92},
+    {name:"GSAT 20",norad:62028,intl:"2024-214A",launch:"November 18, 2024",period:1436.1},
+    {name:"EOS-8",norad:60454,intl:"2024-147A",launch:"August 16, 2024",period:93.1},
+    {name:"TSAT-1A",norad:59442,intl:"2024-066A",launch:"April 7, 2024",period:93.8},
+    {name:"INSAT 3DS",norad:58990,intl:"2024-033A",launch:"February 17, 2024",period:1436.1},
+    {name:"XPOSAT",norad:58694,intl:"2024-001A",launch:"January 1, 2024",period:97.4},
+    {name:"ADITYA-L1",norad:57754,intl:"2023-132A",launch:"September 2, 2023",period:1450.1},
+    {name:"NVS-01",norad:56759,intl:"2023-076A",launch:"May 29, 2023",period:1436.1},
+    {name:"EOS-6",norad:54361,intl:"2022-158A",launch:"November 26, 2022",period:99.5},
+    {name:"CMS-02",norad:52903,intl:"2022-067A",launch:"June 22, 2022",period:1436.1},
+    {name:"EOS-4",norad:51656,intl:"2022-013A",launch:"February 14, 2022",period:95.2},
+    {name:"CMS-01",norad:47256,intl:"2020-099A",launch:"December 17, 2020",period:1436.1},
+    {name:"RISAT-2BR2",norad:46905,intl:"2020-081A",launch:"November 7, 2020",period:95.9},
+    {name:"GSAT 30",norad:45026,intl:"2020-005A",launch:"January 16, 2020",period:1436.1},
+    {name:"CARTOSAT 3",norad:44804,intl:"2019-081A",launch:"November 27, 2019",period:94.8},
+    {name:"RISAT 2B",norad:44233,intl:"2019-028A",launch:"May 22, 2019",period:95.9}
+  ],
+  UK: [
+    {name:"AAC-IO1",norad:68498,intl:"2026-067CL",launch:"March 30, 2026",period:96.6},
+    {name:"HOTSAT-2",norad:68465,intl:"2026-067BB",launch:"March 30, 2026",period:94.9},
+    {name:"VIREON-1",norad:68434,intl:"2026-067U",launch:"March 30, 2026",period:94.8},
+    {name:"VIREON-2",norad:68421,intl:"2026-067F",launch:"March 30, 2026",period:94.8},
+    {name:"CARBSAR",norad:67397,intl:"2026-004AL",launch:"January 11, 2026",period:94.8},
+    {name:"AC1-002",norad:66745,intl:"2025-276CH",launch:"November 28, 2025",period:94.8},
+    {name:"AC1-001",norad:66744,intl:"2025-276CG",launch:"November 28, 2025",period:94.9},
+    {name:"FORGESTAR-1",norad:64546,intl:"2025-135U",launch:"June 23, 2025",period:94.5},
+    {name:"ELEVATION-1",norad:62677,intl:"2025-009BW",launch:"January 14, 2025",period:93.5},
+    {name:"NUVIEW BRAVO",norad:62457,intl:"2024-252D",launch:"December 29, 2024",period:1436.1},
+    {name:"NUVIEW ALPHA",norad:62455,intl:"2024-252B",launch:"December 29, 2024",period:1436.1},
+    {name:"TYCHE",norad:60496,intl:"2024-149AE",launch:"August 16, 2024",period:94.4},
+    {name:"PHISAT 2",norad:60470,intl:"2024-149C",launch:"August 16, 2024",period:94.1},
+    {name:"HOTSAT-1",norad:56954,intl:"2023-084Y",launch:"June 12, 2023",period:94.6},
+    {name:"ONEWEB-0721",norad:56725,intl:"2023-068R",launch:"May 20, 2023",period:108.9},
+    {name:"ONEWEB-0703",norad:56724,intl:"2023-068Q",launch:"May 20, 2023",period:109.5},
+    {name:"ONEWEB-0696",norad:56723,intl:"2023-068P",launch:"May 20, 2023",period:109.5},
+    {name:"ONEWEB-0694",norad:56722,intl:"2023-068N",launch:"May 20, 2023",period:109.4},
+    {name:"ONEWEB-0686",norad:56721,intl:"2023-068M",launch:"May 20, 2023",period:109.4},
+    {name:"SKYNET 5D",norad:37951,intl:"2012-003A",launch:"January 21, 2012",period:1436.1}
+  ],
+  CA: [
+    {name:"AETHER-12",norad:67383,intl:"2026-004W",launch:"January 11, 2026",period:96.8},
+    {name:"AETHER-11",norad:67382,intl:"2026-004V",launch:"January 11, 2026",period:96.8},
+    {name:"AETHER-10",norad:67381,intl:"2026-004U",launch:"January 11, 2026",period:96.8},
+    {name:"AETHER-9",norad:67380,intl:"2026-004T",launch:"January 11, 2026",period:96.8},
+    {name:"AETHER-8",norad:67379,intl:"2026-004S",launch:"January 11, 2026",period:96.8},
+    {name:"AETHER-7",norad:67378,intl:"2026-004R",launch:"January 11, 2026",period:96.9},
+    {name:"AETHER-6",norad:67377,intl:"2026-004Q",launch:"January 11, 2026",period:96.8},
+    {name:"AETHER-5",norad:67376,intl:"2026-004P",launch:"January 11, 2026",period:96.8},
+    {name:"AETHER-4",norad:67375,intl:"2026-004N",launch:"January 11, 2026",period:96.8},
+    {name:"AETHER-3",norad:67374,intl:"2026-004M",launch:"January 11, 2026",period:96.8},
+    {name:"JAY-D1",norad:62669,intl:"2025-009BN",launch:"January 14, 2025",period:94.6},
+    {name:"JAY-C",norad:62668,intl:"2025-009BM",launch:"January 14, 2025",period:94.6},
+    {name:"GHGSAT-C7",norad:56209,intl:"2023-054AH",launch:"April 15, 2023",period:93},
+    {name:"GHGSAT-C6",norad:56204,intl:"2023-054AC",launch:"April 15, 2023",period:92.8},
+    {name:"RCM-2",norad:44324,intl:"2019-033C",launch:"June 12, 2019",period:96.5},
+    {name:"RCM-3",norad:44323,intl:"2019-033B",launch:"June 12, 2019",period:96.5},
+    {name:"RCM-1",norad:44322,intl:"2019-033A",launch:"June 12, 2019",period:96.5},
+    {name:"TELSTAR 18V",norad:43611,intl:"2018-068C",launch:"September 7, 2018",period:1436.1},
+    {name:"TELSTAR 19V",norad:43562,intl:"2018-059A",launch:"July 22, 2018",period:1436.1},
+    {name:"TELSTAR 12V",norad:41036,intl:"2015-068A",launch:"November 24, 2015",period:1436.1}
+  ],
+  GER: [
+    {name:"FLAMINGO-1",norad:67391,intl:"2026-004AE",launch:"January 11, 2026",period:94.9},
+    {name:"GALILEO 34",norad:67162,intl:"2025-302C",launch:"December 17, 2025",period:844.7},
+    {name:"GALILEO 33",norad:67160,intl:"2025-302A",launch:"December 17, 2025",period:844.7},
+    {name:"GENA-OT-1",norad:66774,intl:"2025-276DN",launch:"November 28, 2025",period:94.7},
+    {name:"SKYBEE-A02",norad:64544,intl:"2025-135S",launch:"June 23, 2025",period:94.7},
+    {name:"SKYBEE-A01",norad:62671,intl:"2025-009BQ",launch:"January 14, 2025",period:94.7},
+    {name:"INNOCUBE (TUBSAT-31)",norad:62616,intl:"2025-009H",launch:"January 14, 2025",period:94.4},
+    {name:"ERNST",norad:60528,intl:"2024-149BN",launch:"August 16, 2024",period:93.6},
+    {name:"QUBE",norad:60476,intl:"2024-149J",launch:"August 16, 2024",period:93.2},
+    {name:"OOV-CUBE",norad:60240,intl:"2024-128F",launch:"July 9, 2024",period:95.8},
+    {name:"SONATE-2",norad:59112,intl:"2024-043Q",launch:"March 4, 2024",period:92.5},
+    {name:"NANOFF A",norad:58810,intl:"2023-185T",launch:"December 1, 2023",period:95.2},
+    {name:"NANOFF B",norad:58755,intl:"2023-185S",launch:"December 1, 2023",period:95.2},
+    {name:"H2SAT",norad:57213,intl:"2023-093A",launch:"July 5, 2023",period:1436.1},
+    {name:"ENMAP",norad:52159,intl:"2022-033C",launch:"April 1, 2022",period:97.6},
+    {name:"GMS-T",norad:47346,intl:"2021-004A",launch:"January 20, 2021",period:109.4},
+    {name:"NETSAT-2",norad:46507,intl:"2020-068X",launch:"September 28, 2020",period:93.2},
+    {name:"NETSAT-1",norad:46506,intl:"2020-068W",launch:"September 28, 2020",period:93.9},
+    {name:"NETSAT-3",norad:46505,intl:"2020-068V",launch:"September 28, 2020",period:93.4},
+    {name:"SALSAT (TUBSAT 22)",norad:46495,intl:"2020-068K",launch:"September 28, 2020",period:94.2}
+  ]
+};
+
+const COUNTRY_META = {
+  USA: { label: 'United States',            flag: '🇺🇸', code: 'USA' },
+  CIS: { label: 'CIS (Former USSR)',         flag: '🇷🇺', code: 'CIS' },
+  PRC: { label: "People's Republic of China",flag: '🇨🇳', code: 'PRC' },
+  JPN: { label: 'Japan',                     flag: '🇯🇵', code: 'JPN' },
+  ESA: { label: 'European Space Agency',     flag: '🇪🇺', code: 'ESA' },
+  FR:  { label: 'France',                    flag: '🇫🇷', code: 'FR'  },
+  IND: { label: 'India',                     flag: '🇮🇳', code: 'IND' },
+  UK:  { label: 'United Kingdom',            flag: '🇬🇧', code: 'UK'  },
+  CA:  { label: 'Canada',                    flag: '🇨🇦', code: 'CA'  },
+  GER: { label: 'Germany',                   flag: '🇩🇪', code: 'GER' },
+};
+
+let countryData   = [];   // current satellite list
+let currentCountry= null; // currently selected country code
+let countryMap    = null; // leaflet map for country view
+let countryMarkers= [];   // markers on country map
+let sortCol       = 'launch';
+let sortDir       = -1;   // -1 = desc, 1 = asc
+let selectedNorads= new Set();
+let tleCache      = {};   // norad -> satrec
+
+async function loadCountry(code) {
+  if (!code) return;
+  currentCountry = code;
+  const meta = COUNTRY_META[code];
+  const tbody = document.getElementById('sat-tbody');
+  const tbl   = document.getElementById('sat-table');
+  const ph    = document.getElementById('tbl-placeholder');
+  const stats = document.getElementById('country-stats');
+
+  ph.style.display = 'none';
+  tbl.style.display = 'table';
+  tbody.innerHTML = '<tr class="loading-row"><td colspan="6">⏳ Loading satellites...</td></tr>';
+  stats.textContent = '';
+  document.getElementById('track-btn').style.display = 'none';
+  selectedNorads.clear();
+  countryData = [];
+
+  const satellites = COUNTRY_SATS[code] || [];
+  if (!satellites.length) {
+    tbody.innerHTML = '<tr class="loading-row"><td colspan="6">❌ No data for this country.</td></tr>';
+    return;
+  }
+
+  countryData = satellites;
+  renderCountryTable();
+  if (_countryView === 'kanban') { _ckOpenNorads.clear(); renderCountryKanban(); }
+  stats.textContent = `${meta.flag} ${satellites.length} satellites`;
+  document.querySelector('.tbl-select-all').style.display = 'inline-block';
+  document.getElementById('track-btn').style.display = 'inline-block';
+}
+
+function renderCountryTable() {
+  const tbody = document.getElementById('sat-tbody');
+  const tbl   = document.getElementById('sat-table');
+  tbl.style.display = 'table';
+  document.getElementById('tbl-placeholder').style.display = 'none';
+
+  // Sort
+  const sorted = [...countryData].sort((a, b) => {
+    let va = a[sortCol] ?? '', vb = b[sortCol] ?? '';
+    if (sortCol === 'norad' || sortCol === 'period') { va = va || 0; vb = vb || 0; }
+    if (va < vb) return -sortDir;
+    if (va > vb) return  sortDir;
+    return 0;
+  });
+
+  tbody.innerHTML = sorted.map(sat => {
+    const chk = selectedNorads.has(sat.norad) ? 'checked' : '';
+    const info = SAT_INFO[sat.norad];
+    const typeBadge = info ? `<span style="font-size:0.62rem;background:rgba(0,200,255,0.08);border:1px solid rgba(0,200,255,0.25);color:var(--accent);padding:1px 5px;border-radius:2px;margin-left:6px;vertical-align:middle">${info.type}</span>` : '';
+    const agencyBadge = info ? `<span style="font-size:0.62rem;color:var(--muted);margin-left:4px">${info.agency}</span>` : '';
+    const descRow = info ? `<tr class="info-row" data-for="${sat.norad}" style="display:none"><td colspan="6" style="padding:6px 12px 8px 28px;font-size:0.72rem;color:#8ab4d8;line-height:1.5;border-bottom:1px solid var(--border)">${info.desc}</td></tr>` : '';
+    return `<tr data-norad="${sat.norad}" onclick="toggleRow(this,${sat.norad})" class="${selectedNorads.has(sat.norad)?'selected':''}">
+      <td><input type="checkbox" ${chk} onclick="event.stopPropagation();toggleRow(this.closest('tr'),${sat.norad})"></td>
+      <td class="name-col">${sat.name}${typeBadge}${agencyBadge}</td>
+      <td class="norad-col"><a href="https://www.n2yo.com/?s=${sat.norad}" target="_blank" style="color:var(--accent);text-decoration:none" onclick="event.stopPropagation()">${sat.norad}</a></td>
+      <td class="intl-col">${sat.intl || '—'}</td>
+      <td class="launch-col">${sat.launch || '—'}</td>
+      <td class="period-col">${sat.period ? sat.period.toFixed(1) : '—'}</td>
+    </tr>${descRow}`;
+  }).join('');
+}
+
+function toggleRow(tr, norad) {
+  if (selectedNorads.has(norad)) {
+    selectedNorads.delete(norad);
+    tr.classList.remove('selected');
+    tr.querySelector('input[type=checkbox]').checked = false;
+  } else {
+    selectedNorads.add(norad);
+    tr.classList.add('selected');
+    tr.querySelector('input[type=checkbox]').checked = true;
+  }
+  // Toggle description row visibility
+  const descRow = tr.nextElementSibling;
+  if (descRow && descRow.classList.contains('info-row')) {
+    descRow.style.display = selectedNorads.has(norad) ? 'table-row' : 'none';
+  }
+  const btn = document.getElementById('track-btn');
+  btn.style.display = 'inline-block';
+  btn.textContent = selectedNorads.size
+    ? `🛰 Track ${selectedNorads.size} Selected on Map`
+    : '🛰 Track Selected on Map';
+}
+
+function toggleSelectAll() {
+  if (selectedNorads.size === countryData.length) {
+    selectedNorads.clear();
+  } else {
+    countryData.forEach(s => selectedNorads.add(s.norad));
+  }
+  if (_countryView === 'kanban') {
+    document.querySelectorAll('#ck-grid .ck-card').forEach(card => {
+      const n = parseInt(card.dataset.norad);
+      card.classList.toggle('selected', selectedNorads.has(n));
+    });
+  } else {
+    renderCountryTable();
+  }
+  const btn = document.getElementById('track-btn');
+  btn.textContent = selectedNorads.size
+    ? `🛰 Track ${selectedNorads.size} Selected on Map`
+    : '🛰 Track Selected on Map';
+}
+
+function sortTable(col) {
+  if (sortCol === col) sortDir *= -1;
+  else { sortCol = col; sortDir = -1; }
+  renderCountryTable();
+}
+
+// ── Country view toggle (table / kanban) ──────────────────────
+let _countryView = 'table';
+function setCountryView(mode) {
+  _countryView = mode;
+  document.getElementById('country-table-wrap').style.display  = mode === 'table'  ? 'flex' : 'none';
+  document.getElementById('country-kanban-wrap').style.display = mode === 'kanban' ? 'flex' : 'none';
+  document.getElementById('cv-btn-table').classList.toggle('active',  mode === 'table');
+  document.getElementById('cv-btn-kanban').classList.toggle('active', mode === 'kanban');
+  // Both buttons always visible when data loaded
+  const hasData = countryData.length > 0;
+  document.querySelector('.tbl-select-all').style.display = hasData ? '' : 'none';
+  document.getElementById('track-btn').style.display      = hasData ? 'inline-block' : 'none';
+  if (mode === 'kanban' && hasData) renderCountryKanban();
+}
+
+// ── Country Kanban renderer ────────────────────────────────────
+const CK_TYPE_ICONS = {
+  'space station':    'satellite-icons/space-station.png',
+  'station':          'satellite-icons/space-station.png',
+  'communications':   'satellite-icons/satellite3.png',
+  'communication':    'satellite-icons/satellite3.png',
+  'comms':            'satellite-icons/satellite3.png',
+  'navigation':       'satellite-icons/satellite5.png',
+  'gnss':             'satellite-icons/satellite5.png',
+  'gps':              'satellite-icons/satellite5.png',
+  'earth observation':'satellite-icons/satellite6.png',
+  'observation':      'satellite-icons/satellite6.png',
+  'remote sensing':   'satellite-icons/satellite6.png',
+  'weather':          'satellite-icons/satellite7.png',
+  'meteorological':   'satellite-icons/satellite7.png',
+  'scientific':       'satellite-icons/satellite2.png',
+  'science':          'satellite-icons/satellite2.png',
+  'military':         'satellite-icons/satellite8.png',
+  'reconnaissance':   'satellite-icons/satellite8.png',
+  'technology':       'satellite-icons/satellite4.png',
+  'experimental':     'satellite-icons/satellite4.png',
+  'relay':            'satellite-icons/satellite1.png',
+};
+const CK_FALLBACK_ICONS = [
+  'satellite-icons/satellite1.png','satellite-icons/satellite2.png',
+  'satellite-icons/satellite3.png','satellite-icons/satellite4.png',
+];
+function ckIconFor(type, norad) {
+  if (!type) return CK_FALLBACK_ICONS[norad % CK_FALLBACK_ICONS.length];
+  const t = type.toLowerCase();
+  for (const [key, path] of Object.entries(CK_TYPE_ICONS)) {
+    if (t.includes(key)) return path;
+  }
+  return CK_FALLBACK_ICONS[norad % CK_FALLBACK_ICONS.length];
+}
+
+let _ckOpenNorads = new Set();
+function renderCountryKanban() {
+  const grid = document.getElementById('ck-grid');
+  const period_label = p => p ? p.toFixed(1) + ' min' : '—';
+  const orbit_from_period = p => {
+    if (!p) return { type: 'UNK', color: '#888' };
+    if (p < 200)   return { type: 'LEO',  color: '#00ff9d' };
+    if (p < 700)   return { type: 'MEO',  color: '#ffd700' };
+    if (p < 1500)  return { type: 'GEO',  color: '#ff4466' };
+    return           { type: 'DEEP', color: '#aa88ff' };
+  };
+
+  grid.innerHTML = countryData.map(sat => {
+    const info   = SAT_INFO[sat.norad];
+    const orbit  = orbit_from_period(sat.period);
+    const isOpen = _ckOpenNorads.has(sat.norad);
+    const iconSrc = ckIconFor(info ? info.type : null, sat.norad);
+    const typeBadge = info ? `<span class="ck-type-badge">${info.type}</span><span class="ck-agency">${info.agency}</span>` : '';
+    const descBlock = info
+      ? `<div class="ck-desc" id="ck-desc-${sat.norad}"></div>`
+      : `<div class="ck-desc" style="color:var(--muted);font-style:italic">No description available.</div>`;
+    return `
+    <div class="ck-card${isOpen?' open':''}${selectedNorads.has(sat.norad)?' selected':''}" data-norad="${sat.norad}"
+         style="border-left-color:${orbit.color}"
+         onclick="toggleCKCard(this,${sat.norad})">
+      <div class="ck-scan-line"></div>
+      <img class="ck-sat-icon" src="${iconSrc}" alt="">
+      <div class="ck-card-corner">#${sat.norad}</div>
+      <div class="ck-sel-tick">◈ SELECTED</div>
+      <div class="ck-title">${sat.name}</div>
+      <div>${typeBadge}</div>
+      <div class="ck-meta">
+        <div class="ck-meta-item">ORBIT<span style="color:${orbit.color}">${orbit.type}</span></div>
+        <div class="ck-meta-item">PERIOD<span>${period_label(sat.period)}</span></div>
+        <div class="ck-meta-item">LAUNCH<span>${sat.launch || '—'}</span></div>
+        <div class="ck-meta-item">INT'L<span>${sat.intl || '—'}</span></div>
+      </div>
+      <div class="ck-expand">
+        ${descBlock}
+        <a class="ck-n2yo" href="https://www.n2yo.com/?s=${sat.norad}" target="_blank" onclick="event.stopPropagation()">⟶ TRACK ON N2YO</a>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Re-open cards that were open before re-render
+  _ckOpenNorads.forEach(norad => {
+    const card = grid.querySelector(`[data-norad="${norad}"]`);
+    if (card) startCKTypewriter(card, norad);
+  });
+}
+
+function toggleCKCard(card, norad) {
+  // Right-side of card (bottom 30px) = selection toggle; rest = expand toggle
+  const wasOpen = card.classList.contains('open');
+  card.classList.toggle('open');
+  if (!wasOpen) {
+    _ckOpenNorads.add(norad);
+    startCKTypewriter(card, norad);
+  } else {
+    _ckOpenNorads.delete(norad);
+  }
+  // Also toggle selection
+  if (selectedNorads.has(norad)) {
+    selectedNorads.delete(norad);
+    card.classList.remove('selected');
+  } else {
+    selectedNorads.add(norad);
+    card.classList.add('selected');
+  }
+  // Update track button label
+  const btn = document.getElementById('track-btn');
+  btn.textContent = selectedNorads.size
+    ? `🛰 Track ${selectedNorads.size} Selected on Map`
+    : '🛰 Track Selected on Map';
+}
+
+// Per-card typewriter timers keyed by norad
+const _ckTimers = {};
+function startCKTypewriter(card, norad) {
+  const info   = SAT_INFO[norad];
+  const descEl = card.querySelector(`#ck-desc-${norad}`);
+  if (!info || !descEl) return;
+  if (_ckTimers[norad]) { clearInterval(_ckTimers[norad]); }
+  descEl.textContent = '';
+  let i = 0;
+  _ckTimers[norad] = setInterval(() => {
+    if (i < info.desc.length) {
+      descEl.textContent += info.desc[i];
+      if (i % 3 === 0) beep(280 + Math.random() * 180, 0.022, 0.035);
+      i++;
+    } else {
+      clearInterval(_ckTimers[norad]);
+      delete _ckTimers[norad];
+    }
+  }, 16);
+}
+
+function closeMapModal(e) {
+  if (e && e.target !== document.getElementById('map-modal-overlay')) return;
+  document.getElementById('map-modal-overlay').classList.remove('open');
+}
+
+// ── Web Audio beep for typewriter ──────────────────────────────
+let _audioCtx = null;
+function getAudioCtx() {
+  if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return _audioCtx;
+}
+function beep(freq = 880, dur = 0.04, vol = 0.08) {
+  try {
+    const ctx = getAudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(freq, ctx.currentTime);
+    gain.gain.setValueAtTime(vol, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + dur);
+  } catch(e) {}
+}
+
+// ── Typewriter with beep ───────────────────────────────────────
+let _twTimer = null;
+let _twTimer2 = null;
+function typewrite(el, text, speed = 40) {
+  if (_twTimer) { clearInterval(_twTimer); }
+  el.textContent = '';
+  let i = 0;
+  _twTimer = setInterval(() => {
+    if (i < text.length) {
+      el.textContent += text[i];
+      if (i % 2 === 0) beep(600 + Math.random() * 400, 0.03, 0.06);
+      i++;
+    } else {
+      clearInterval(_twTimer); _twTimer = null;
+    }
+  }, speed);
+}
+function typewrite2(el, text, speed = 18) {
+  if (_twTimer2) { clearInterval(_twTimer2); }
+  el.textContent = '';
+  let i = 0;
+  _twTimer2 = setInterval(() => {
+    if (i < text.length) {
+      el.textContent += text[i];
+      if (i % 3 === 0) beep(300 + Math.random() * 200, 0.025, 0.04);
+      i++;
+    } else {
+      clearInterval(_twTimer2); _twTimer2 = null;
+    }
+  }, speed);
+}
+
+// ── Show HUD on hover ──────────────────────────────────────────
+let _hudLastNorad = null;
+function showHUD(sat, lat, lng, alt, vel, orbitType, orbitColor, period, intl, launch) {
+  const idle = document.getElementById('hud-idle');
+  const data = document.getElementById('hud-data');
+  idle.style.display = 'none';
+  data.style.display = 'flex';
+
+  // Don't restart if this satellite is already displayed
+  if (_hudLastNorad === sat.norad) return;
+  _hudLastNorad = sat.norad;
+
+  // Typewrite the name
+  const nameEl = document.getElementById('hud-sat-name');
+  typewrite(nameEl, sat.name, 35);
+
+  // Instant fill rest
+  const set = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
+  const latStr = (lat >= 0 ? '+' : '') + lat.toFixed(4) + '°';
+  const lngStr = (lng >= 0 ? '+' : '') + lng.toFixed(4) + '°';
+  set('hv-lat',    latStr);
+  set('hv-lng',    lngStr);
+  set('hv-alt',    alt + ' km');
+  set('hv-vel',    vel + ' km/s');
+  set('hv-orbit',  orbitType);
+  set('hv-period', period);
+  set('hv-norad',  '#' + sat.norad);
+  set('hv-intl',   intl);
+  set('hv-launch', launch);
+
+  // Color the orbit type
+  const orbitEl = document.getElementById('hv-orbit');
+  if (orbitEl) {
+    orbitEl.style.color = orbitColor;
+    orbitEl.style.textShadow = `0 0 8px ${orbitColor}`;
+  }
+
+  // Highlight orbit ring dot
+  ['leo','meo','geo'].forEach(t => {
+    const d = document.getElementById('hud-dot-' + t);
+    if (d) d.className = 'orbit-sat' + (t === orbitType.toLowerCase() ? ' active' : '');
+  });
+  if (orbitType === 'DEEP') {
+    ['leo','meo','geo'].forEach(t => {
+      const d = document.getElementById('hud-dot-' + t);
+      if (d) d.className = 'orbit-sat';
+    });
+  }
+
+  // N2YO link
+  const link = document.getElementById('hv-n2yo');
+  if (link) link.href = `https://www.n2yo.com/?s=${sat.norad}`;
+
+  // Show SAT_INFO description & type if available
+  const infoEl = document.getElementById('hv-desc-block');
+  if (infoEl) {
+    const info = SAT_INFO[sat.norad];
+    if (info) {
+      infoEl.style.display = 'block';
+      const typeEl = document.getElementById('hv-sat-type');
+      const descEl = document.getElementById('hv-sat-desc');
+      if (typeEl) { typeEl.textContent = info.type; typeEl.style.color = '#00c8ff'; }
+      if (descEl) typewrite2(descEl, info.desc, 18);
+    } else {
+      infoEl.style.display = 'none';
+    }
+  }
+
+  // Update status bar
+  const status = document.getElementById('map-modal-status');
+  if (status) status.textContent = `LOCKED: ${sat.name} [${sat.norad}]`;
+}
+
+async function trackSelected() {
+  if (!selectedNorads.size) { alert('Select at least one satellite first.'); return; }
+  if (location.protocol === 'file:') {
+    alert('⚠️ TLE fetch is blocked when opening from file://\n\nFix: run a local server:\n  python -m http.server 8080\n\nThen open: http://localhost:8080/satellite-tracker.html');
+    return;
+  }
+
+  // Open modal first
+  const overlay = document.getElementById('map-modal-overlay');
+  const statusEl = document.getElementById('map-modal-status');
+  const meta = COUNTRY_META[currentCountry] || {};
+  document.getElementById('map-modal-title').textContent =
+    `// ${meta.flag || ''}  ${(meta.label || '').toUpperCase()}  —  ${selectedNorads.size} OBJECT${selectedNorads.size>1?'S':''} TRACKED`;
+  statusEl.textContent = 'Fetching TLE data…';
+  overlay.classList.add('open');
+
+  // Init Leaflet map inside modal if needed
+  if (!countryMap) {
+    countryMap = L.map('country-map', { zoomControl: true, worldCopyJump: true, zoomDelta: 0.5, zoomSnap: 0.5, wheelPxPerZoomLevel: 120 }).setView([20, 0], 2);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '© CartoDB', maxZoom: 19
+    }).addTo(countryMap);
+    addTerminatorLayer(countryMap);
+  }
+  // invalidateSize twice: immediately and after CSS transition settles
+  requestAnimationFrame(() => countryMap.invalidateSize());
+  setTimeout(() => countryMap.invalidateSize(), 300);
+
+  // Clear old markers
+  countryMarkers.forEach(m => countryMap.removeLayer(m));
+  countryMarkers = [];
+
+  // Fetch TLE for each selected satellite, then compute position
+  const selected = countryData.filter(s => selectedNorads.has(s.norad));
+  let placed = 0;
+
+  await Promise.all(selected.map(async sat => {
+    try {
+      // Fetch TLE from N2YO
+      let satrec = tleCache[sat.norad];
+      if (!satrec) {
+        // tle.ivanstanojevic.me has CORS enabled; N2YO does not
+        // NOTE: file:// origin blocks all fetch() — open via a local server if this fails
+        const r = await fetch(`https://tle.ivanstanojevic.me/api/tle/${sat.norad}`, { mode: 'cors' });
+        const d = await r.json();
+        if (d.line1 && d.line2) {
+          satrec = satellite.twoline2satrec(d.line1.trim(), d.line2.trim());
+          tleCache[sat.norad] = satrec;
+        }
+      }
+
+      if (!satrec) return;
+
+      const now  = new Date();
+      const pv   = satellite.propagate(satrec, now);
+      if (!pv.position) return;
+      const gmst = satellite.gstime(now);
+      const geo  = satellite.eciToGeodetic(pv.position, gmst);
+      const lat  = satellite.degreesLat(geo.latitude);
+      const lng  = satellite.degreesLong(geo.longitude);
+      const alt  = geo.height.toFixed(0);
+      const v    = pv.velocity;
+      const vel  = v ? Math.sqrt(v.x*v.x+v.y*v.y+v.z*v.z).toFixed(2) : '—';
+
+      const iconPath = ckIconFor(SAT_INFO[sat.norad] ? SAT_INFO[sat.norad].type : null, sat.norad);
+      const icon = L.icon({
+        iconUrl: iconPath,
+        iconSize: [28, 28], iconAnchor: [14, 14],
+        className: 'sat-map-icon'
+      });
+
+      // Classify orbit
+      const altN = parseFloat(alt);
+      const orbitType = altN < 2000 ? 'LEO' : altN < 35000 ? 'MEO' : altN < 36200 ? 'GEO' : 'DEEP';
+      const orbitColor = {LEO:'#00ff9d',MEO:'#ffd700',GEO:'#ff4466',DEEP:'#aa88ff'}[orbitType];
+
+      // Find satellite metadata from countryData
+      const satMeta = countryData.find(s2 => s2.norad === sat.norad) || {};
+      const period = satMeta.period ? satMeta.period + ' min' : '—';
+      const intl = satMeta.intl || '—';
+      const launch = satMeta.launch || '—';
+
+      const marker = L.marker([lat, lng], {icon})
+        .addTo(countryMap);
+
+      marker.on('mouseover', () => showHUD(sat, lat, lng, alt, vel, orbitType, orbitColor, period, intl, launch));
+      marker.on('click',     () => showHUD(sat, lat, lng, alt, vel, orbitType, orbitColor, period, intl, launch));
+
+      countryMarkers.push(marker);
+      placed++;
+    } catch(e) { console.warn('TLE error for', sat.norad, e); }
+  }));
+
+  statusEl.textContent = `Showing ${placed} of ${selected.length} plotted`;
+  countryMap.invalidateSize();
+
+  if (placed > 0 && countryMarkers.length) {
+    const group = L.featureGroup(countryMarkers);
+    countryMap.fitBounds(group.getBounds().pad(0.2));
+  }
+
+  document.getElementById('country-stats').textContent =
+    `Showing ${placed} of ${selected.length} selected on map`;
+}
+
+// ============================================================
+// UPDATE switchView to handle countries
+// ============================================================
+
+function switchView(view) {
+  currentView = view;
+  document.getElementById('kanban-view').style.display    = view === 'kanban'    ? 'flex'  : 'none';
+  document.getElementById('map-view').style.display       = view === 'map'       ? 'block' : 'none';
+  document.getElementById('country-view').style.display  = view === 'countries'  ? 'flex'  : 'none';
+  document.getElementById('btn-kanban').classList.toggle('active',    view === 'kanban');
+  document.getElementById('btn-map').classList.toggle('active',       view === 'map');
+  document.getElementById('btn-countries').classList.toggle('active', view === 'countries');
+
+  if (view === 'map') {
+    initMap();
+    setTimeout(() => map && map.invalidateSize(), 100);
+  }
+  if (view === 'countries' && countryMap) {
+    setTimeout(() => countryMap.invalidateSize(), 100);
+  }
+}
+
+// ============================================================
+// GEOLOCATION
+// ============================================================
+function detectLocation() {
+  if (!navigator.geolocation) { alert('Geolocation not supported'); return; }
+  navigator.geolocation.getCurrentPosition(pos => {
+    observer.lat = pos.coords.latitude;
+    observer.lng = pos.coords.longitude;
+    observer.alt = Math.round((pos.coords.altitude || 0) / 1000);
+    document.getElementById('last-update').textContent = `📍 Location set: ${observer.lat.toFixed(2)}°, ${observer.lng.toFixed(2)}°`;
+    // Update observer marker on map
+    if (map) {
+      map.eachLayer(l => { if (l._latlng && !l._url && !mapMarkers[l._norad]) map.removeLayer(l); });
+    }
+  }, () => alert('Could not get location. Using default (London).'));
+}
+
+// ============================================================
+// INIT
+// ============================================================
+async function init() {
+  document.getElementById('last-update').textContent = 'Fetching TLE data...';
+
+  // Fetch TLEs for all satellites in parallel (deduplicated)
+  const uniqueNorads = [...new Set(SATELLITES.map(s => s.norad))];
+  await Promise.all(uniqueNorads.map(n => fetchTLE(n)));
+
+  document.getElementById('last-update').textContent = 'Calculating positions...';
+
+  // First position update
+  await updateAllPositions();
+
+  // Refresh LEO every 10s, others lazily
+  setInterval(updateAllPositions, 10000);
+}
+
+// Start
+init();
+</script>
+</body>
+</html>

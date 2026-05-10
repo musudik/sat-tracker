@@ -40,6 +40,73 @@
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
+  /* ── FOOTER ── */
+  #site-footer {
+    background: var(--toolbar); border-top: 1px solid var(--border);
+    padding: 8px 20px; display: flex; align-items: center; gap: 16px;
+    flex-wrap: wrap; flex-shrink: 0; font-size: 0.7rem; color: var(--muted);
+    font-family: var(--mono);
+  }
+  #site-footer a { color: var(--accent); text-decoration: none; }
+  #site-footer a:hover { text-decoration: underline; }
+
+  /* ── COOKIE BANNER ── */
+  #cookie-banner {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 99998;
+    background: rgba(4,12,24,0.97); border-top: 1px solid var(--accent);
+    padding: 12px 20px; display: flex; align-items: center; gap: 12px;
+    flex-wrap: wrap; font-size: 0.75rem; color: var(--text); font-family: var(--mono);
+    box-shadow: 0 -4px 20px rgba(0,200,255,0.15);
+  }
+  #cookie-banner span { flex: 1; min-width: 200px; }
+  #cookie-banner button {
+    background: rgba(0,200,255,0.15); border: 1px solid var(--accent);
+    color: var(--accent); padding: 5px 16px; border-radius: 2px; cursor: pointer;
+    font-family: var(--cyber); font-size: 0.7rem; letter-spacing: 1px; white-space: nowrap;
+  }
+  #cookie-banner button:hover { background: rgba(0,200,255,0.3); }
+
+  /* ── CREDITS VIEW ── */
+  #credits-view {
+    flex: 1; overflow-y: auto; display: none; flex-direction: column;
+    background: var(--bg); padding: 24px;
+  }
+  #credits-inner { max-width: 960px; margin: 0 auto; width: 100%; }
+  .credits-hero {
+    text-align: center; padding: 32px 20px 24px; border-bottom: 1px solid var(--border); margin-bottom: 28px;
+  }
+  .credits-title {
+    font-family: var(--cyber); font-size: 1.6rem; color: var(--accent);
+    letter-spacing: 4px; text-shadow: 0 0 20px rgba(0,200,255,0.5); margin-bottom: 8px;
+  }
+  .credits-sub { color: var(--muted); font-size: 0.85rem; margin-bottom: 14px; }
+  .credits-badge {
+    display: inline-block; background: rgba(0,200,255,0.08); border: 1px solid rgba(0,200,255,0.3);
+    border-radius: 4px; padding: 8px 18px; font-size: 0.78rem; color: var(--accent2); line-height: 1.6;
+  }
+  .credits-badge a { color: var(--accent); text-decoration: none; }
+  .credits-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 16px; margin-bottom: 28px;
+  }
+  .credits-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 18px 20px;
+  }
+  .credits-card-highlight { border-color: rgba(0,200,255,0.4); background: rgba(0,200,255,0.04); }
+  .credits-card-title {
+    font-family: var(--cyber); font-size: 0.78rem; color: var(--accent);
+    letter-spacing: 1.5px; margin-bottom: 14px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .credits-item { margin-bottom: 14px; }
+  .credits-item:last-child { margin-bottom: 0; }
+  .credits-item-name { font-weight: bold; color: var(--text); margin-bottom: 4px; font-size: 0.82rem; }
+  .credits-item-name a { color: var(--accent); text-decoration: none; }
+  .credits-item-name a:hover { text-decoration: underline; }
+  .credits-item-desc { color: var(--muted); font-size: 0.76rem; line-height: 1.6; }
+  .credits-thankyou {
+    text-align: center; padding: 28px 20px; border-top: 1px solid var(--border); margin-top: 8px;
+  }
+
   /* Scanline overlay */
   body::before {
     content: '';
@@ -594,6 +661,7 @@
   <button class="view-btn active" id="btn-kanban" onclick="switchView('kanban')">📋 Kanban</button>
   <button class="view-btn" id="btn-map" onclick="switchView('map')">🗺️ Map</button>
   <button class="view-btn" id="btn-countries" onclick="switchView('countries')">🌍 Countries</button>
+  <button class="view-btn" id="btn-credits" onclick="switchView('credits')">🙏 Credits</button>
   <button class="loc-btn" onclick="detectLocation()">📍 My Location</button>
   <span id="status-bar">
     <span id="refresh-dot"></span>
@@ -663,12 +731,12 @@
     <button class="tbl-select-all" onclick="toggleSelectAll()">☑ Select All</button>
     <button id="track-btn" onclick="trackSelected()">🛰 Track Selected on Map</button>
     <div class="cv-toggle">
-      <button id="cv-btn-table"   class="active" onclick="setCountryView('table')">⊞ TABLE</button>
-      <button id="cv-btn-kanban"          onclick="setCountryView('kanban')">▦ KANBAN</button>
+      <button id="cv-btn-table"          onclick="setCountryView('table')">⊞ TABLE</button>
+      <button id="cv-btn-kanban" class="active" onclick="setCountryView('kanban')">▦ KANBAN</button>
     </div>
   </div>
   <div id="country-content">
-    <div id="country-table-wrap">
+    <div id="country-table-wrap" style="display:none">
       <div class="table-placeholder" id="tbl-placeholder">
         <div class="big">🌍</div>
         Select a country above to view its satellites
@@ -1791,7 +1859,7 @@ function sortTable(col) {
 }
 
 // ── Country view toggle (table / kanban) ──────────────────────
-let _countryView = 'table';
+let _countryView = 'kanban';
 function setCountryView(mode) {
   _countryView = mode;
   document.getElementById('country-table-wrap').style.display  = mode === 'table'  ? 'flex' : 'none';
@@ -2181,11 +2249,13 @@ async function trackSelected() {
 function switchView(view) {
   currentView = view;
   document.getElementById('kanban-view').style.display    = view === 'kanban'    ? 'flex'  : 'none';
-  document.getElementById('map-view').style.display       = view === 'map'       ? 'block' : 'none';
+  document.getElementById('map-view').style.display      = view === 'map'       ? 'block' : 'none';
   document.getElementById('country-view').style.display  = view === 'countries'  ? 'flex'  : 'none';
+  document.getElementById('credits-view').style.display  = view === 'credits'    ? 'flex'  : 'none';
   document.getElementById('btn-kanban').classList.toggle('active',    view === 'kanban');
   document.getElementById('btn-map').classList.toggle('active',       view === 'map');
   document.getElementById('btn-countries').classList.toggle('active', view === 'countries');
+  document.getElementById('btn-credits').classList.toggle('active',   view === 'credits');
 
   if (view === 'map') {
     initMap();
@@ -2234,6 +2304,110 @@ async function init() {
 
 // Start
 init();
+
+// ============================================================
+// COOKIE CONSENT
+// ============================================================
+(function initCookieConsent() {
+  if (localStorage.getItem('cookie_consent') === 'accepted') return;
+  const banner = document.createElement('div');
+  banner.id = 'cookie-banner';
+  banner.innerHTML = `
+    <span>🍪 This site uses localStorage to save your preferences (observer location, view state). No tracking cookies. <a href="#" onclick="document.getElementById('credits-view').style.display='flex';switchView('credits');return false;" style="color:var(--accent)">Learn more</a></span>
+    <button onclick="localStorage.setItem('cookie_consent','accepted');document.getElementById('cookie-banner').remove()">Accept</button>
+    <button onclick="document.getElementById('cookie-banner').remove()" style="background:transparent;border-color:var(--muted);color:var(--muted)">Dismiss</button>
+  `;
+  document.body.appendChild(banner);
+})();
 </script>
+
+<!-- CREDITS VIEW -->
+<div id="credits-view" style="display:none">
+  <div id="credits-inner">
+    <div class="credits-hero">
+      <div class="credits-title">🛸 SATELLITE TRACKER</div>
+      <div class="credits-sub">A live orbital intelligence dashboard</div>
+      <div class="credits-badge">⚡ Demo project showcasing the <strong>Kanban feature</strong> of <a href="https://hermes-agent.nousresearch.com" target="_blank">Hermes Agent</a> by Nous Research</div>
+    </div>
+
+    <div class="credits-grid">
+      <!-- APIs -->
+      <div class="credits-card">
+        <div class="credits-card-title">🔌 APIs &amp; Data Sources</div>
+        <div class="credits-item">
+          <div class="credits-item-name"><a href="https://www.n2yo.com" target="_blank">N2YO.com</a></div>
+          <div class="credits-item-desc">Real-time satellite TLE data, visual pass predictions, and orbital elements. Powers satellite position tracking and pass forecasting in this app.</div>
+        </div>
+        <div class="credits-item">
+          <div class="credits-item-name"><a href="https://celestrak.org" target="_blank">CelesTrak</a></div>
+          <div class="credits-item-desc">Dr. T.S. Kelso's authoritative catalog of NORAD two-line element sets used for orbital propagation. The gold standard for satellite tracking data.</div>
+        </div>
+        <div class="credits-item">
+          <div class="credits-item-name"><a href="https://www.space-track.org" target="_blank">Space-Track.org</a></div>
+          <div class="credits-item-desc">US Space Command's official satellite catalog — upstream source for TLE data distributed through N2YO and CelesTrak.</div>
+        </div>
+      </div>
+
+      <!-- Libraries -->
+      <div class="credits-card">
+        <div class="credits-card-title">📦 Open Source Libraries</div>
+        <div class="credits-item">
+          <div class="credits-item-name"><a href="https://leafletjs.com" target="_blank">Leaflet.js</a></div>
+          <div class="credits-item-desc">Lightweight, mobile-friendly interactive maps. Renders the world map with satellite markers, day/night terminator, and country overlays.</div>
+        </div>
+        <div class="credits-item">
+          <div class="credits-item-name"><a href="https://github.com/shashwatak/satellite-js" target="_blank">satellite.js</a></div>
+          <div class="credits-item-desc">SGP4/SDP4 orbital propagation library. Calculates real-time lat/lng/altitude from TLE data entirely client-side — no API call needed for positions.</div>
+        </div>
+        <div class="credits-item">
+          <div class="credits-item-name"><a href="https://fonts.google.com/specimen/Orbitron" target="_blank">Orbitron &amp; Share Tech Mono</a></div>
+          <div class="credits-item-desc">Google Fonts powering the sci-fi aesthetic. Orbitron for headers, Share Tech Mono for data readouts.</div>
+        </div>
+      </div>
+
+      <!-- Hosting -->
+      <div class="credits-card">
+        <div class="credits-card-title">☁️ Infrastructure</div>
+        <div class="credits-item">
+          <div class="credits-item-name"><a href="https://vercel.com" target="_blank">Vercel</a></div>
+          <div class="credits-item-desc">Serverless hosting platform. Serves this static dashboard and provides the N2YO API proxy function that keeps the API key secure and solves CORS.</div>
+        </div>
+        <div class="credits-item">
+          <div class="credits-item-name"><a href="https://openstreetmap.org" target="_blank">OpenStreetMap</a></div>
+          <div class="credits-item-desc">Tile data behind the Leaflet map. Community-maintained geographic data used under the Open Database License.</div>
+        </div>
+      </div>
+
+      <!-- Hermes -->
+      <div class="credits-card credits-card-highlight">
+        <div class="credits-card-title">🤖 Built With Hermes Agent</div>
+        <div class="credits-item">
+          <div class="credits-item-name"><a href="https://hermes-agent.nousresearch.com" target="_blank">Hermes Agent — Nous Research</a></div>
+          <div class="credits-item-desc">This entire application — map, Kanban board, HUD, satellite data, day/night terminator, icons, and deployment pipeline — was designed and built through conversation with Hermes Agent. The Kanban board in the Countries view is a live demo of Hermes's built-in Kanban task management feature.</div>
+        </div>
+        <div style="margin-top:14px;padding:10px 12px;background:rgba(0,200,255,0.06);border:1px solid rgba(0,200,255,0.2);border-radius:4px;font-size:0.78rem;color:var(--accent2);line-height:1.6">
+          ⚠️ <strong>For demonstration purposes only.</strong> Satellite data shown is for educational/illustrative use. Always verify with official sources for mission-critical applications.
+        </div>
+      </div>
+    </div>
+
+    <div class="credits-thankyou">
+      <div style="font-size:1.5rem;margin-bottom:8px">🙏</div>
+      <div style="font-family:var(--cyber);font-size:0.85rem;color:var(--accent);letter-spacing:2px;margin-bottom:10px">THANK YOU</div>
+      <div style="color:var(--muted);font-size:0.8rem;max-width:500px;margin:0 auto;line-height:1.8">
+        To every open-source contributor, satellite tracker hobbyist, space agency, and data provider who makes real-time space awareness accessible to everyone. You make projects like this possible. 🚀
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer id="site-footer">
+  <span>🛸 <strong style="color:var(--accent);font-family:var(--cyber)">SATELLITE TRACKER</strong></span>
+  <span>Demo · Built with <a href="https://hermes-agent.nousresearch.com" target="_blank">Hermes Agent</a> to showcase the <strong>Kanban feature</strong></span>
+  <span>Data: <a href="https://www.n2yo.com" target="_blank">N2YO</a> · <a href="https://celestrak.org" target="_blank">CelesTrak</a> · <a href="https://leafletjs.com" target="_blank">Leaflet</a></span>
+  <span style="color:var(--muted)">© 2026 — For demonstration purposes only</span>
+</footer>
+
 </body>
 </html>

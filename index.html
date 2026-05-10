@@ -278,8 +278,14 @@
   }
   #country-kanban-wrap .ck-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    grid-template-columns: repeat(3, 1fr);
     gap: 12px;
+  }
+  @media (max-width: 900px) {
+    #country-kanban-wrap .ck-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 540px) {
+    #country-kanban-wrap .ck-grid { grid-template-columns: 1fr; }
   }
   .ck-card {
     background: linear-gradient(135deg, rgba(10,20,35,0.97) 0%, rgba(5,15,30,0.99) 100%);
